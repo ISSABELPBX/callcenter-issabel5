@@ -291,10 +291,11 @@ class AMIEventProcess extends TuberiaProcess
                 'QueueStatusComplete', 'Leave', 'Reload', 'Agents', 'AgentsComplete',
                 'AgentCalled', 'AgentDump', 'AgentConnect', 'AgentComplete',
                 'QueueMemberPaused', 'ParkedCall', /*'ParkedCallTimeOut',*/
-                'ParkedCallGiveUp', 'QueueCallerAbandon',
+                'ParkedCallGiveUp', 'QueueCallerAbandon', 'BridgeEnter'
             ) as $k)
                 $astman->add_event_handler($k, array($this, "msg_$k"));
             $astman->add_event_handler('Bridge', array($this, "msg_Link")); // Visto en Asterisk 1.6.2.x
+
             if ($this->DEBUG && $this->_config['dialer']['allevents'])
                 $astman->add_event_handler('*', array($this, 'msg_Default'));
 
@@ -2003,6 +2004,63 @@ Uniqueid: 1429642067.241008
             }
         }
     }
+    public function msg_BridgeDestroy($sEvent, $params, $sServer, $iPort)
+    {
+        global $saved_bridge_unique, $saved_bridge_channel;
+        $bunique = $params['BridgeUniqueid'];
+        unset($saved_bridge_unique[$bunique]);
+        unset($saved_bridge_channel[$bunique]);
+        $this->_log->output('DEBUG: '.__METHOD__. "Bridge Destroy $bunique");
+
+    }
+
+    public function msg_BridgeEnter($sEvent, $params, $sServer, $iPort)
+    {
+        global $saved_bridge_unique, $saved_bridge_channel;
+
+        // BridgeTechnology simple_bridge con BridgeNumChannels: 1, guardamos datos para esperar el BridgeNumChannels: 2 y disparar el Link simulado
+
+        if($params['BridgeTechnology']<>'simple_bridge') {
+            return false;
+        }
+
+        $bunique = $params['BridgeUniqueid'];
+
+        if(preg_match("|Local/(.*)@agents-.*|",$params['Channel'],$matches)) { 
+            $params['Channel']='Agent/'.$matches[1];
+        }
+
+        if($params['BridgeNumChannels']==1) {
+            $saved_bridge_unique[$bunique]  = $params['Uniqueid'];
+            $saved_bridge_channel[$bunique] = $params['Channel'];
+            $this->_log->output('DEBUG: '.__METHOD__. "Bridge Enter $bunique number channels 1 saving data");
+        } else if ($params['BridgeNumChannels']==2) {
+            $this->_log->output('DEBUG: '.__METHOD__. "Bridge Enter $bunique number channels 2, constructing link channel ".$params['Channel']);
+            if(isset($saved_bridge_unique[$bunique])) {
+                $params['Uniqueid1']=$params['Uniqueid'];
+                $params['Channel1']=$params['Channel'];
+                $params['Uniqueid2']=$saved_bridge_unique[$bunique];
+                $params['Channel2']=$saved_bridge_channel[$bunique];
+                //unset($saved_bridge_unique[$bunique]);
+                //unset($saved_bridge_channel[$bunique]);
+                $params['Event']='Link';
+                $this->msg_Link("Link", $params, $sServer, $iPort); 
+            } else {
+                $llamada = $this->_listaLlamadas->buscar('auxchannel', $params['Uniqueid']);
+                $this->_log->output('DEBUG: '.__METHOD__. "Bridge Enter NICO estaba destruido busco auxchnnale $llamada");
+                $llamada->dump($this->_log);
+
+                $llamada = $this->_listaLlamadas->buscar('channel', $params['Uniqueid']);
+                $this->_log->output('DEBUG: '.__METHOD__. "Bridge Enter NICO estaba destruido busco chnnale $llamada");
+                $llamada->dump($this->_log);
+
+                // $llamada->actualchannel = $sCanalCandidato
+
+            }
+
+        }
+    }
+
 
     public function msg_Link($sEvent, $params, $sServer, $iPort)
     {
