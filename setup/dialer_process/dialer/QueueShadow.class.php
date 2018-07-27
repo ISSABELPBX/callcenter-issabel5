@@ -262,12 +262,22 @@ class QueueShadow
         // Cola validada que tiene eventwhencalled activo
         $this->_queues[$params['Queue']]['eventwhencalled'] = TRUE;
 
-        if (isset($this->_queues[$params['Queue']]['members'][$params['Member']])) {
-            $this->_queues[$params['Queue']]['members'][$params['Member']]['LinkStart'] = NULL;
+        if(isset($params['Member'])) {
+            $agentmember = $params['Member'];
+        } else {
+            // Asterisk 13
+            // We must set the agent name to be Agent/xxxx in the agent configuration
+            $agentmember = $params['MemberName'];
+        }
 
+        if (isset($this->_queues[$params['Queue']]['members'][$agentmember])) {
+            $this->_queues[$params['Queue']]['members'][$agentmember]['LinkStart'] = NULL;
+
+            $this->_log->output('WARN: '.__METHOD__.': si se encuentra miembro '.$agentmember.
+                ' en cola '.$params['Queue']);
             // La actualización de Status debería hacerse en un QueueMemberStatus próximo
         } else {
-            $this->_log->output('WARN: '.__METHOD__.': no se encuentra miembro '.$params['Member'].
+            $this->_log->output('WARN: '.__METHOD__.': no se encuentra miembro '.$agentmember.
                 ' en cola '.$params['Queue']);
         }
     }
@@ -282,14 +292,25 @@ class QueueShadow
         // Cola validada que tiene eventwhencalled activo
         $this->_queues[$params['Queue']]['eventwhencalled'] = TRUE;
 
-        if (isset($this->_queues[$params['Queue']]['members'][$params['Member']])) {
-            $this->_queues[$params['Queue']]['members'][$params['Member']]['LinkStart'] = $params['local_timestamp_received'];
+        if(isset($params['Member'])) {
+            $agentmember = $params['Member'];
+        } else {
+            // Asterisk 13
+            // We must set the agent name to be Agent/xxxx in the agent configuration
+            $agentmember = $params['MemberName'];
+        }
+
+        if (isset($this->_queues[$params['Queue']]['members'][$agentmember])) {
+            $this->_queues[$params['Queue']]['members'][$agentmember]['LinkStart'] = $params['local_timestamp_received'];
+
+$this->_log->output('WARN: '.__METHOD__.': se  encuentra miembro '.$agentmember.  ' en cola '.$params['Queue']. '  y se le pone linkstart en '.$params['local_timestamp_received']);
 
             // La actualización de Status debería hacerse en un QueueMemberStatus próximo
         } else {
-            $this->_log->output('WARN: '.__METHOD__.': no se encuentra miembro '.$params['Member'].
+            $this->_log->output('WARN: '.__METHOD__.': no se encuentra miembro '.$agentmember.
                 ' en cola '.$params['Queue']);
         }
+ 
     }
 
     function msg_AgentDump($params)
