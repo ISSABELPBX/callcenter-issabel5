@@ -13,7 +13,7 @@ It uses the [Asterisk©](http://www.asterisk.org/ "Asterisk Home Page") open sou
 Call Center
 ----
 
-Call Center module for Issabel.
+Call Center module for Issabel. Changes to make it work with Asterisk 13
 
 
 License
