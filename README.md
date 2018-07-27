@@ -16,6 +16,43 @@ Call Center
 Call Center module for Issabel. Changes to make it work with Asterisk 13
 
 
+Manual Modifications for Testing
+----
+
+In order to test, some changes are needed in the Asterisk dialplan, in
+/etc/asterisk/extensions_custom.conf create a new context:
+
+```
+[agents]
+exten = _X.,1,NoOp()
+same = n,AgentRequest(${EXTEN})
+same = n,Congestion()
+```
+
+This context will be used to dial to a particular logged in Agent.
+
+Then in agents.conf you must use this format for agents:
+
+```
+[1000]
+fullname=Pedro
+autologoff=15
+ackcall=yes
+acceptdtmf=##
+```
+
+Finally you should add agents into queues with a special format. From
+the Asterisk CLI you can try something like this:
+
+```
+queue add member Local/1000@agents/n to 2000 penalty 0 as "Agente 1000" state_interface Agent:1000
+```
+
+
+
+
+
+
 License
 ----
 
