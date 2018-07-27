@@ -188,14 +188,24 @@ class QueueShadow
         // Cola validada que tiene eventmemberstatus activo
         $this->_queues[$params['Queue']]['eventmemberstatus'] = TRUE;
 
-        if (isset($this->_queues[$params['Queue']]['members'][$params['Location']])) {
-            $this->_queues[$params['Queue']]['members'][$params['Location']]['Status'] = $params['Status'];
-            $this->_queues[$params['Queue']]['members'][$params['Location']]['Paused'] = ($params['Paused'] != 0);
+        if(isset($params['Location'])) {
+            // Asterisk 11
+            $campolocation = $params['Location'];
+        } else {
+            // Asterisk 13
+            $campolocation = $params['StateInterface'];
+            $campolocation = preg_replace("/:/","/",$campolocation);
+
+        }
+
+        if (isset($this->_queues[$params['Queue']]['members'][$campolocation])) {
+            $this->_queues[$params['Queue']]['members'][$campolocation]['Status'] = $params['Status'];
+           $this->_queues[$params['Queue']]['members'][$campolocation]['Paused'] = ($params['Paused'] != 0);
             // Voy a asumir que puedo conservar el valor de LinkStart
         } else {
-           $this->_log->output('WARN: '.__METHOD__.': no se encuentra miembro '.$params['Location'].
-               ' en cola '.$params['Queue'].', se agrega');
-            $this->_queues[$params['Queue']]['members'][$params['Location']] = array(
+           $this->_log->output('WARN: '.__METHOD__.': no se encuentra miembro '.$campolocation.
+              ' en cola '.$params['Queue'].', se agrega');
+            $this->_queues[$params['Queue']]['members'][$campolocation] = array(
                 'removed'   => FALSE,
                 'Status'    => $params['Status'],
                 'Paused'    => ($params['Paused'] != 0),

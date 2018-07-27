@@ -1389,6 +1389,7 @@ class AMIEventProcess extends TuberiaProcess
         foreach ($total_agents as $tupla) {
             // id type number name estatus
             $sAgente = $tupla['type'].'/'.$tupla['number'];
+
             $a = $this->_listaAgentes->buscar('agentchannel', $sAgente);
             if (is_null($a)) {
                 // Agente nuevo por registrar
@@ -2473,6 +2474,14 @@ Uniqueid: 1429642067.241008
         $this->_queueshadow->msg_QueueStatusComplete($params);
         $this->_tmp_actionid_queuestatus = NULL;
         foreach ($this->_tmp_estadoAgenteCola as $sAgente => $estadoCola) {
+
+            if(preg_match("|^Local/[^@]*@agents/n|",$sAgente)) {
+                $partes = preg_split("|/|",$sAgente);
+                $partes = preg_split("|@|",$partes[1]);
+
+                $sAgente = "Agent/".$partes[0];
+            }
+
             $a = $this->_listaAgentes->buscar('agentchannel', $sAgente);
             if (!is_null($a)) {
                 $this->_evaluarPertenenciaColas($a, $estadoCola);
@@ -2513,6 +2522,8 @@ Uniqueid: 1429642067.241008
         $bAgentePausado = ($a->num_pausas > 0);
 
         $sAgente = $a->channel;
+        $this->_log->output('INFO: evaluar pertenencia agente '.$sAgente.' tiene estado consola '.$a->estado_consola);
+
         if ($a->estado_consola == 'logged-in') {
             // Revisar y sincronizar estado de pausa en colas
             foreach ($estadoCola_Paused as $cola => $p) {
@@ -2597,13 +2608,22 @@ Uniqueid: 1429642067.241008
 
         $this->_queueshadow->msg_QueueMemberStatus($params);
 
-        $a = $this->_listaAgentes->buscar('agentchannel', $params['Location']);
+        if(isset($params['Location'])) {
+            // Asterisk 11
+            $campolocation = $params['Location'];
+        } else {
+            // Asterisk 13
+            $campolocation = $params['StateInterface'];
+            $campolocation = preg_replace("/:/","/",$campolocation);
+        }
+
+        $a = $this->_listaAgentes->buscar('agentchannel', $campolocation);
         if (!is_null($a)) {
             // TODO: existe $params['Paused'] que indica si está en pausa
             $a->actualizarEstadoEnCola($params['Queue'], $params['Status']);
         } else {
             if ($this->DEBUG) {
-                $this->_log->output('WARN: agente '.$params['Location'].' no es un agente registrado en el callcenter, se ignora');
+                $this->_log->output('WARN: agente '.$campolocation.' no es un agente registrado en el callcenter, se ignora');
             }
         }
     }
