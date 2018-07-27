@@ -15,6 +15,7 @@ Call Center
 
 Call Center module for Issabel. Changes to make it work with Asterisk 13
 
+[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=A44XMWDSCVTL6)
 
 Manual Modifications for Testing
 ----
@@ -49,7 +50,8 @@ queue add member Local/1000@agents/n to 2000 penalty 0 as "Agente 1000" state_in
 ```
 
 
-
+> This is a work in progress. It might not work at all. If you want to move this project/work forward
+> you are welcome to collaborate
 
 
 
