@@ -534,37 +534,32 @@ PETICION_CAMPANIAS_ENTRANTES;
         if (is_null($iNumLlamadasColocar) || $iNumLlamadasColocar > $iMaxPredecidos)
             $iNumLlamadasColocar = $iMaxPredecidos;
 
-      //añadido por hgm para pruebas sobre colocar 25-06-2018
-            $this->_log->output('DEBUG: '.__METHOD__." (campania {$infoCampania['id']} ".
-                "cola {$infoCampania['queue']}): resumen de predicción:\n".
-                    "\tagentes libres.........: {$resumenPrediccion['AGENTES_LIBRES']}\n".
-                    "\tagentes por desocuparse: {$resumenPrediccion['AGENTES_POR_DESOCUPAR']}\n".
-                    "\tllamadas simultaneas realizar: {$iNumLlamadasColocar}\n".
-                    "\tllamadas extras a forzar: ".$this->_configDB->dialer_forzar_sobrecolocar."\n".
-                    "\tclientes en espera.....: {$resumenPrediccion['CLIENTES_ESPERA']}");
-//añadido por hgmnetwork.com 26-06-2018 para forzar mas llamadas por agente
-//miramos si como mínimo hay 1 llamada por hacer que fuerce mas, si es 0 llamadas ignora para no hacer llamadas sin agentes libres o apunto
-if ($iNumLlamadasColocar>0){
-$iNumLlamadasColocar= $iNumLlamadasColocar + $this->_configDB->dialer_forzar_sobrecolocar;
-};
- $this->_log->output('DEBUG: '.__METHOD__." (campania {$infoCampania['id']} ".
-                "cola {$infoCampania['queue']}): resumen de predicción:\n".
-                    "\tLlamadas a realizar finalmente.........: {$iNumLlamadasColocar}\n");
         // TODO: colocar código de detección de conflicto de agentes
 
+$pepe = $iNumLlamadasColocar;
+
+/*
+
+        // En Asterisk13 el Originate Response llega tarde, luego de que el llamado termina, no podemos considerar que está pendiente
+        // Por ese motivo comentamos por ahora este bloque, para ver cual es el mejor curso de accion en el futuro y evitar
+        // colocar llamados cuando hay algunos pendientes todavia.
+
         if ($iNumLlamadasColocar > 0) {
-            /* El valor de llamadas predichas no toma en cuenta las llamadas que han
-             * sido generadas pero todavía no se recibe su OriginateResponse. Para
-             * evitar sobrecolocar mientras las primeras llamadas esperan ser
-             * contestadas, se cuentan tales llamadas y se resta. */
-            $iNumEsperanRespuesta = count($listaLlamadasAgendadas) +
-                $this->_contarLlamadasEsperandoRespuesta($infoCampania['queue']);
 
-            if ($iNumLlamadasColocar > $iNumEsperanRespuesta)
+            // El valor de llamadas predichas no toma en cuenta las llamadas que han
+            // sido generadas pero todavía no se recibe su OriginateResponse. Para
+            // evitar sobrecolocar mientras las primeras llamadas esperan ser
+            // contestadas, se cuentan tales llamadas y se resta. 
+
+            $iNumEsperanRespuesta = count($listaLlamadasAgendadas) + $this->_contarLlamadasEsperandoRespuesta($infoCampania['queue']);
+
+            if ($iNumLlamadasColocar > $iNumEsperanRespuesta) {
                 $iNumLlamadasColocar -= $iNumEsperanRespuesta;
-            else $iNumLlamadasColocar = 0;
+            } else { 
+                $iNumLlamadasColocar = 0;
+            }
         }
-
+*/
         if (count($listaLlamadasAgendadas) <= 0 && $iNumLlamadasColocar <= 0) {
             if ($this->DEBUG) {
                 $this->_log->output("DEBUG: ".__METHOD__." (campania {$infoCampania['id']} cola ".
