@@ -20,7 +20,7 @@
   +----------------------------------------------------------------------+
   | The Initial Developer of the Original Code is PaloSanto Solutions    |
   +----------------------------------------------------------------------+
-  $Id: AMIEventProcess.class.php, Thu 21 Nov 2019 12:57:02 PM EST, nicolas@issabel.com
+  $Id: AMIEventProcess.class.php, Thu 21 Nov 2019 03:39:13 PM EST, nicolas@issabel.com
 */
 class AMIEventProcess extends TuberiaProcess
 {
@@ -296,6 +296,7 @@ class AMIEventProcess extends TuberiaProcess
             ) as $k)
                 $astman->add_event_handler($k, array($this, "msg_$k"));
             $astman->add_event_handler('Bridge', array($this, "msg_Link")); // Visto en Asterisk 1.6.2.x
+            $astman->add_event_handler('DialBegin', array($this, "msg_Dial")); // Visto en Asterisk 1.6
 
             if ($this->DEBUG && $this->_config['dialer']['allevents'])
                 $astman->add_event_handler('*', array($this, 'msg_Default'));
@@ -2053,8 +2054,8 @@ Uniqueid: 1429642067.241008
                 $params['Channel2']=$saved_bridge_channel[$bunique];
                 //unset($saved_bridge_unique[$bunique]);
                 //unset($saved_bridge_channel[$bunique]);
-                $params['Event']='Link';
-                $this->msg_Link("Link", $params, $sServer, $iPort); 
+                $params['Event']='Bridge';
+                $this->msg_Link("bridge", $params, $sServer, $iPort); 
             } else {
                 $llamada = $this->_listaLlamadas->buscar('auxchannel', $params['Uniqueid']);
                 $this->_log->output('DEBUG: '.__METHOD__. "Bridge Enter NICO estaba destruido busco auxchnnale $llamada");
