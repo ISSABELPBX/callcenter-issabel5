@@ -1,25 +1,27 @@
 <?php
 /* vim: set expandtab tabstop=4 softtabstop=4 shiftwidth=4:
- Codificación: UTF-8
- +----------------------------------------------------------------------+
- | Issabel version 1.2-2                                                |
- | http://www.issabel.org                                               |
- +----------------------------------------------------------------------+
- | Copyright (c) 2006 Palosanto Solutions S. A.                         |
- +----------------------------------------------------------------------+
- | The contents of this file are subject to the General Public License  |
- | (GPL) Version 2 (the "License"); you may not use this file except in |
- | compliance with the License. You may obtain a copy of the License at |
- | http://www.opensource.org/licenses/gpl-license.php                   |
- |                                                                      |
- | Software distributed under the License is distributed on an "AS IS"  |
- | basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See  |
- | the License for the specific language governing rights and           |
- | limitations under the License.                                       |
- +----------------------------------------------------------------------+
- | The Initial Developer of the Original Code is PaloSanto Solutions    |
- +----------------------------------------------------------------------+
- $Id: DialerProcess.class.php,v 1.48 2009/03/26 13:46:58 alex Exp $ */
+  Codificación: UTF-8
+  +----------------------------------------------------------------------+
+  | Issabel version 4.0                                                  |
+  | http://www.issabel.org                                               |
+  +----------------------------------------------------------------------+
+  | Copyright (c) 2019 Issabel Foundation                                |
+  | Copyright (c) 2006 Palosanto Solutions S. A.                         |
+  +----------------------------------------------------------------------+
+  | The contents of this file are subject to the General Public License  |
+  | (GPL) Version 2 (the "License"); you may not use this file except in |
+  | compliance with the License. You may obtain a copy of the License at |
+  | http://www.opensource.org/licenses/gpl-license.php                   |
+  |                                                                      |
+  | Software distributed under the License is distributed on an "AS IS"  |
+  | basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See  |
+  | the License for the specific language governing rights and           |
+  | limitations under the License.                                       |
+  +----------------------------------------------------------------------+
+  | The Initial Developer of the Original Code is PaloSanto Solutions    |
+  +----------------------------------------------------------------------+
+  $Id: QueueShadow.class.php, Thu 21 Nov 2019 12:56:17 PM EST, nicolas@issabel.com
+*/
 
 // Para obtener los estados de miembros definidos en Agente.class.php
 require_once 'Agente.class.php';
@@ -140,6 +142,14 @@ class QueueShadow
 
     function msg_QueueMemberAdded($params)
     {
+        if(!isset($params['Location'])) {
+            // Asterisk 16
+            if(isset($params['Interface'])) {
+                $loc = isset($params['StateInterface'])?$params['StateInterface']:$params['Interface'];
+                $params['Location']=$loc;
+            }
+        }
+
         if (!isset($this->_queues[$params['Queue']])) {
             $this->_log->output('WARN: '.__METHOD__.': no se encuentra cola '.$params['Queue']);
             return;
@@ -155,6 +165,15 @@ class QueueShadow
 
     function msg_QueueMemberRemoved($params)
     {
+
+        if(!isset($params['Location'])) {
+            // Asterisk 16
+            if(isset($params['Interface'])) {
+                $loc = isset($params['StateInterface'])?$params['StateInterface']:$params['Interface'];
+                $params['Location']=$loc;
+            }
+        }
+
         if (!isset($this->_queues[$params['Queue']])) {
             $this->_log->output('WARN: '.__METHOD__.': no se encuentra cola '.$params['Queue']);
             return;
@@ -165,6 +184,15 @@ class QueueShadow
 
     function msg_QueueMemberPaused($params)
     {
+
+        if(!isset($params['Location'])) {
+            // Asterisk 16
+            if(isset($params['Interface'])) {
+                $loc = isset($params['StateInterface'])?$params['StateInterface']:$params['Interface'];
+                $params['Location']=$loc;
+            }
+        }
+
         if (!isset($this->_queues[$params['Queue']])) {
             $this->_log->output('WARN: '.__METHOD__.': no se encuentra cola '.$params['Queue']);
             return;
@@ -267,7 +295,7 @@ class QueueShadow
         } else {
             // Asterisk 13
             // We must set the agent name to be Agent/xxxx in the agent configuration
-            $agentmember = $params['MemberName'];
+            $agentmember = $params['Interface'];
         }
 
         if (isset($this->_queues[$params['Queue']]['members'][$agentmember])) {

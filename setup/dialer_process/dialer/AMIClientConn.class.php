@@ -2,9 +2,10 @@
 /* vim: set expandtab tabstop=4 softtabstop=4 shiftwidth=4:
   Codificación: UTF-8
   +----------------------------------------------------------------------+
-  | Issabel version 1.2-2                                               |
+  | Issabel version 1.2-2                                                |
   | http://www.issabel.org                                               |
   +----------------------------------------------------------------------+
+  | Copyright (c) 2019 Issabel Foundation                                |
   | Copyright (c) 2006 Palosanto Solutions S. A.                         |
   +----------------------------------------------------------------------+
   | The contents of this file are subject to the General Public License  |
@@ -19,8 +20,8 @@
   +----------------------------------------------------------------------+
   | The Initial Developer of the Original Code is PaloSanto Solutions    |
   +----------------------------------------------------------------------+
-  $Id: DialerConn.class.php,v 1.48 2009/03/26 13:46:58 alex Exp $ */
-
+  $Id: AMIClientConn.class.php, Thu 21 Nov 2019 12:55:55 PM EST, nicolas@issabel.com
+*/
 if(!class_exists('AGI')) {
     require_once(dirname(__FILE__) . DIRECTORY_SEPARATOR . 'phpagi.php');
 }
@@ -269,6 +270,9 @@ class AMIClientConn extends MultiplexConn
                     $sValor = substr($s, $a + 2);
                     if (!$bEsperando_END_COMMAND && $sClave == 'Response' && $sValor == 'Follows') {
                         $bEsperando_END_COMMAND = TRUE;
+                    } elseif ($sClave == 'Output') {
+                        // Asterisk 16
+                        $paquete['data'].=$sValor."\n";
                     } elseif ($bEsperando_END_COMMAND && !in_array($sClave, array('Privilege', 'ActionID'))) {
                         $sClave = $sValor = NULL;
                         $bProcesando_END_COMMAND = TRUE;

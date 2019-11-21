@@ -2,9 +2,10 @@
 /* vim: set expandtab tabstop=4 softtabstop=4 shiftwidth=4:
   Codificación: UTF-8
   +----------------------------------------------------------------------+
-  | Issabel version 1.2-2                                               |
+  | Issabel version 4.0                                                  |
   | http://www.issabel.org                                               |
   +----------------------------------------------------------------------+
+  | Copyright (c) 2019 Issabel Foundation                                |
   | Copyright (c) 2006 Palosanto Solutions S. A.                         |
   +----------------------------------------------------------------------+
   | The contents of this file are subject to the General Public License  |
@@ -19,8 +20,8 @@
   +----------------------------------------------------------------------+
   | The Initial Developer of the Original Code is PaloSanto Solutions    |
   +----------------------------------------------------------------------+
-  $Id: DialerProcess.class.php,v 1.48 2009/03/26 13:46:58 alex Exp $ */
-
+  $Id: AMIEventProcess.class.php, Thu 21 Nov 2019 12:57:02 PM EST, nicolas@issabel.com
+*/
 class AMIEventProcess extends TuberiaProcess
 {
     private $DEBUG = FALSE; // VERDADERO si se activa la depuración
@@ -1840,6 +1841,15 @@ Uniqueid: 1429642067.241008
     // Nueva función
     public function msg_QueueMemberAdded($sEvent, $params, $sServer, $iPort)
     {
+
+        if(!isset($params['Location'])) {
+            // Asterisk 16
+            if(isset($params['Interface'])) {
+                $loc = isset($params['StateInterface'])?$params['StateInterface']:$params['Interface'];
+                $params['Location']=$loc;
+            }
+        }
+
         if ($this->DEBUG) {
             $this->_log->output('DEBUG: '.__METHOD__.
                 "\nretraso => ".(microtime(TRUE) - $params['local_timestamp_received']).
