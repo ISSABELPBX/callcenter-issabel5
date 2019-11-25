@@ -93,7 +93,7 @@
           </td>
         </tr>
 <!-- Begin: CallbackLogin checkbox -->
-	<tr>
+	<tr id='callbackcheck'>
           <td width="40%">
               <div align="center">{$CALLBACK_LOGIN}:</div>
           </td>
@@ -111,6 +111,8 @@
     </td>
   </tr>
 </table>
+
+<input type=hidden name=onlycallback id=onlycallback value="{$ONLY_CALLBACK}">
 
 </form>
 

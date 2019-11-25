@@ -41,10 +41,20 @@ $(document).ready(function() {
     $('#issabel-callcenter-info-message').hide();
     $('#issabel-callcenter-agendar-llamada-error-message').hide();
 
-    $('#label_extension_callback').hide();
-    $('#input_extension_callback').hide();
-    $('#label_password_callback').hide();
-    $('#input_password_callback').hide();
+    if($('#onlycallback').val()==0) {
+        $('#label_extension_callback').hide();
+        $('#input_extension_callback').hide();
+        $('#label_password_callback').hide();
+        $('#input_password_callback').hide();
+    } else {
+        $('#input_callback').prop('checked', true);
+
+	$('#input_extension').hide();
+	$('#input_agent_user').hide();
+	$('#label_extension').hide();
+	$('#label_agent_user').hide();
+	$('#callbackcheck').hide();
+    }
 
     $('#btn_hangup').button();
     $('#btn_togglebreak').button();

@@ -23,6 +23,8 @@
 require_once "libs/paloSantoForm.class.php";
 require_once "libs/paloSantoTrunk.class.php";
 require_once "libs/paloSantoConfig.class.php";
+require_once '/var/lib/asterisk/agi-bin/phpagi-asmanager.php';
+
 
 define ('AGENT_CONSOLE_DEBUG_LOG', FALSE);
 
@@ -35,6 +37,23 @@ function _moduleContent(&$smarty, $module_name)
     require_once "modules/$module_name/libs/paloSantoConsola.class.php";
     require_once "modules/$module_name/configs/default.conf.php";
     require_once "modules/$module_name/libs/JSON.php";
+
+
+    $astman = new AGI_AsteriskManager();
+    if (!$astman->connect("127.0.0.1", 'admin' , obtenerClaveAMIAdmin())) {
+            $asteriskVersion=array(11,25,3);
+    } else {
+        $r = $astman->send_request('CoreSettings');
+        if ($r['Response'] == 'Success' && isset($r['AsteriskVersion'])) {
+            $asteriskVersion = explode('.', $r['AsteriskVersion']);
+        }
+    }
+
+    $onlyCallback=0;
+    if($asteriskVersion[0]>11) {
+        $onlyCallback=1;
+    }
+    $smarty->assign('ONLY_CALLBACK', $onlyCallback);
 
     _debug("module entry: ".
         "\$_GET = ".print_r($_GET, TRUE)."\n".
