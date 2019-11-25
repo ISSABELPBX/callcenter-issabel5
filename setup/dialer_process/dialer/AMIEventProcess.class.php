@@ -295,8 +295,11 @@ class AMIEventProcess extends TuberiaProcess
                 'ParkedCallGiveUp', 'QueueCallerAbandon', 'BridgeEnter'
             ) as $k)
                 $astman->add_event_handler($k, array($this, "msg_$k"));
+
             $astman->add_event_handler('Bridge', array($this, "msg_Link")); // Visto en Asterisk 1.6.2.x
-            $astman->add_event_handler('DialBegin', array($this, "msg_Dial")); // Visto en Asterisk 1.6
+            $astman->add_event_handler('DialBegin', array($this, "msg_Dial")); 
+            $astman->add_event_handler('QueueCallerJoin', array($this, "msg_Join")); 
+            $astman->add_event_handler('QueueCallerLeave', array($this, "msg_Leave")); 
 
             if ($this->DEBUG && $this->_config['dialer']['allevents'])
                 $astman->add_event_handler('*', array($this, 'msg_Default'));
@@ -1665,47 +1668,35 @@ Uniqueid: 1429642067.241008
                 );
         }
 
-        /*
-        Asterisk 1.4.x
-        2010-05-20 16:01:38 : (DialerProcess) DEBUG: dial:
-        params => Array
-        (
-            [Event] => Dial
-            [Privilege] => call,all
-            [Source] => Local/96350440@from-internal-a2b9,2
-            [Destination] => SIP/telmex-0000004c
-            [CallerID] => <unknown>
-            [CallerIDName] => <unknown>
-            [SrcUniqueID] => 1274385698.159
-            [DestUniqueID] => 1274385698.160
-        )
-
-        Asterisk 1.6.2.x
-        2010-10-08 18:49:18 : (DialerProcess) DEBUG: dial:
-        params => Array
-        (
-            [Event] => Dial
-            [Privilege] => call,all
-            [SubEvent] => Begin
-            [Channel] => Local/1065@from-internal-fd98;2
-            [Destination] => SIP/1065-00000003
-            [CallerIDNum] => <unknown>
-            [CallerIDName] => <unknown>
-            [UniqueID] => 1286581757.4
-            [DestUniqueID] => 1286581758.5
-            [Dialstring] => 1065
-        )
-        */
-        if (isset($params['SubEvent']) && $params['SubEvent'] == 'End')
+        if (!isset($params['Channel'])) {
             return FALSE;
+        }
+
+        if (isset($params['SubEvent']) && $params['SubEvent'] == 'End') {
+            return FALSE;
+        }
 
         $srcUniqueId = $destUniqueID = NULL;
-        if (isset($params['SrcUniqueID']))
+        if (isset($params['SrcUniqueID'])) {
             $srcUniqueId = $params['SrcUniqueID'];
-        elseif (isset($params['UniqueID']))
+        } elseif (isset($params['UniqueID'])) {
             $srcUniqueId = $params['UniqueID'];
-        if (isset($params['DestUniqueID']))
+        } elseif (isset($params['Uniqueid'])) {
+            $srcUniqueId = $params['Uniqueid'];
+        }
+
+        if (isset($params['DestUniqueID'])) {
             $destUniqueID = $params['DestUniqueID'];
+        } elseif (isset($params['DestUniqueid'])) {
+            $destUniqueID = $params['DestUniqueid'];
+        }
+
+        if(!isset($params['Destination'])) {
+            // Asterisk 13
+            if(isset($params['DestChannel'])) {
+                $params['Destination']=$params['DestChannel'];
+            }
+        }
 
         if (!is_null($srcUniqueId) && !is_null($destUniqueID)) {
             /* Si el SrcUniqueID es alguno de los Uniqueid monitoreados, se añade el
@@ -1843,20 +1834,14 @@ Uniqueid: 1429642067.241008
     public function msg_QueueMemberAdded($sEvent, $params, $sServer, $iPort)
     {
 
-        if(!isset($params['Location'])) {
-            // Asterisk 16
-            if(isset($params['Interface'])) {
-                $loc = isset($params['StateInterface'])?$params['StateInterface']:$params['Interface'];
-                $params['Location']=$loc;
-            }
-        }
-
         if ($this->DEBUG) {
             $this->_log->output('DEBUG: '.__METHOD__.
                 "\nretraso => ".(microtime(TRUE) - $params['local_timestamp_received']).
                 "\n$sEvent: => ".print_r($params, TRUE)
                 );
         }
+
+        $params['Location'] = isset($params['Location'])?$params['Location']:$params['Interface'];  // Since Asterisk 13 we have Interface and no Location
 
         $this->_queueshadow->msg_QueueMemberAdded($params);
 
@@ -1912,6 +1897,8 @@ Uniqueid: 1429642067.241008
                 "\n$sEvent: => ".print_r($params, TRUE)
                 );
         }
+
+        $params['Location'] = isset($params['Location'])?$params['Location']:$params['Interface'];  // Since Asterisk 13 we have Interface and no Location
 
         $this->_queueshadow->msg_QueueMemberRemoved($params);
 
@@ -2295,6 +2282,11 @@ Uniqueid: 1429642067.241008
             return FALSE;
         }
 
+        if (strpos($params['Channel'], 'Local/')===0) {
+            $this->_log->output('DEBUG: ignoro hangup local');
+            return FALSE;
+        }
+
         $a = NULL;
         $llamada = $this->_listaLlamadas->buscar('uniqueid', $params['Uniqueid']);
         if (is_null($llamada)) {
@@ -2489,6 +2481,8 @@ Uniqueid: 1429642067.241008
         if (is_null($this->_tmp_actionid_queuestatus)) return;
         if ($params['ActionID'] != $this->_tmp_actionid_queuestatus) return;
 
+        $params['Location'] = isset($params['Location'])?$params['Location']:$params['Interface'];  // Since Asterisk 13 we have Interface and no Location
+
         $this->_queueshadow->msg_QueueMember($params);
 
         /* Se debe usar Location porque Name puede ser el nombre amistoso */
@@ -2675,24 +2669,17 @@ Uniqueid: 1429642067.241008
             );
         }
 
+        $params['Location'] = isset($params['Location'])?$params['Location']:$params['Interface'];  // Since Asterisk 13 we have Interface and no Location
+
         $this->_queueshadow->msg_QueueMemberStatus($params);
 
-        if(isset($params['Location'])) {
-            // Asterisk 11
-            $campolocation = $params['Location'];
-        } else {
-            // Asterisk 13
-            $campolocation = $params['StateInterface'];
-            $campolocation = preg_replace("/:/","/",$campolocation);
-        }
-
-        $a = $this->_listaAgentes->buscar('agentchannel', $campolocation);
+        $a = $this->_listaAgentes->buscar('agentchannel', $params['Location']);
         if (!is_null($a)) {
             // TODO: existe $params['Paused'] que indica si está en pausa
             $a->actualizarEstadoEnCola($params['Queue'], $params['Status']);
         } else {
             if ($this->DEBUG) {
-                $this->_log->output('WARN: agente '.$campolocation.' no es un agente registrado en el callcenter, se ignora');
+                $this->_log->output('WARN: agente '.$params['Location'].' no es un agente registrado en el callcenter, se ignora');
             }
         }
     }
