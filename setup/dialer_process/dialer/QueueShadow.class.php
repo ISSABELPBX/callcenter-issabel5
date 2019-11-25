@@ -20,7 +20,7 @@
   +----------------------------------------------------------------------+
   | The Initial Developer of the Original Code is PaloSanto Solutions    |
   +----------------------------------------------------------------------+
-  $Id: QueueShadow.class.php, Thu 21 Nov 2019 12:56:17 PM EST, nicolas@issabel.com
+  $Id: QueueShadow.class.php, Mon 25 Nov 2019 03:12:40 PM EST, nicolas@issabel.com
 */
 
 // Para obtener los estados de miembros definidos en Agente.class.php
@@ -142,19 +142,12 @@ class QueueShadow
 
     function msg_QueueMemberAdded($params)
     {
-        if(!isset($params['Location'])) {
-            // Asterisk 16
-            if(isset($params['Interface'])) {
-                $loc = isset($params['StateInterface'])?$params['StateInterface']:$params['Interface'];
-                $params['Location']=$loc;
-            }
-        }
-
         if (!isset($this->_queues[$params['Queue']])) {
             $this->_log->output('WARN: '.__METHOD__.': no se encuentra cola '.$params['Queue']);
             return;
         }
 
+        $params['Location'] = isset($params['Location'])?$params['Location']:$params['Interface'];
         $this->_queues[$params['Queue']]['members'][$params['Location']] = array(
             'removed'   => FALSE,
             'Status'    => $params['Status'],
@@ -165,39 +158,23 @@ class QueueShadow
 
     function msg_QueueMemberRemoved($params)
     {
-
-        if(!isset($params['Location'])) {
-            // Asterisk 16
-            if(isset($params['Interface'])) {
-                $loc = isset($params['StateInterface'])?$params['StateInterface']:$params['Interface'];
-                $params['Location']=$loc;
-            }
-        }
-
         if (!isset($this->_queues[$params['Queue']])) {
             $this->_log->output('WARN: '.__METHOD__.': no se encuentra cola '.$params['Queue']);
             return;
         }
 
+        $params['Location'] = isset($params['Location'])?$params['Location']:$params['Interface'];
         unset($this->_queues[$params['Queue']]['members'][$params['Location']]);
     }
 
     function msg_QueueMemberPaused($params)
     {
-
-        if(!isset($params['Location'])) {
-            // Asterisk 16
-            if(isset($params['Interface'])) {
-                $loc = isset($params['StateInterface'])?$params['StateInterface']:$params['Interface'];
-                $params['Location']=$loc;
-            }
-        }
-
         if (!isset($this->_queues[$params['Queue']])) {
             $this->_log->output('WARN: '.__METHOD__.': no se encuentra cola '.$params['Queue']);
             return;
         }
 
+        $params['Location'] = isset($params['Location'])?$params['Location']:$params['Interface'];
         if (isset($this->_queues[$params['Queue']]['members'][$params['Location']])) {
             $this->_queues[$params['Queue']]['members'][$params['Location']]['Paused'] = ($params['Paused'] != 0);
         } else {
@@ -216,24 +193,15 @@ class QueueShadow
         // Cola validada que tiene eventmemberstatus activo
         $this->_queues[$params['Queue']]['eventmemberstatus'] = TRUE;
 
-        if(isset($params['Location'])) {
-            // Asterisk 11
-            $campolocation = $params['Location'];
-        } else {
-            // Asterisk 13
-            $campolocation = $params['StateInterface'];
-            $campolocation = preg_replace("/:/","/",$campolocation);
-
-        }
-
-        if (isset($this->_queues[$params['Queue']]['members'][$campolocation])) {
-            $this->_queues[$params['Queue']]['members'][$campolocation]['Status'] = $params['Status'];
-           $this->_queues[$params['Queue']]['members'][$campolocation]['Paused'] = ($params['Paused'] != 0);
+        $params['Location'] = isset($params['Location'])?$params['Location']:$params['Interface'];
+        if (isset($this->_queues[$params['Queue']]['members'][$params['Location']])) {
+            $this->_queues[$params['Queue']]['members'][$params['Location']]['Status'] = $params['Status'];
+            $this->_queues[$params['Queue']]['members'][$params['Location']]['Paused'] = ($params['Paused'] != 0);
             // Voy a asumir que puedo conservar el valor de LinkStart
         } else {
-           $this->_log->output('WARN: '.__METHOD__.': no se encuentra miembro '.$campolocation.
-              ' en cola '.$params['Queue'].', se agrega');
-            $this->_queues[$params['Queue']]['members'][$campolocation] = array(
+           $this->_log->output('WARN: '.__METHOD__.': no se encuentra miembro '.$params['Location'].
+               ' en cola '.$params['Queue'].', se agrega');
+            $this->_queues[$params['Queue']]['members'][$params['Location']] = array(
                 'removed'   => FALSE,
                 'Status'    => $params['Status'],
                 'Paused'    => ($params['Paused'] != 0),
@@ -290,22 +258,13 @@ class QueueShadow
         // Cola validada que tiene eventwhencalled activo
         $this->_queues[$params['Queue']]['eventwhencalled'] = TRUE;
 
-        if(isset($params['Member'])) {
-            $agentmember = $params['Member'];
-        } else {
-            // Asterisk 13
-            // We must set the agent name to be Agent/xxxx in the agent configuration
-            $agentmember = $params['Interface'];
-        }
+        $params['Member'] = isset($params['Member'])?$params['Member']:$params['Interface'];
+        if (isset($this->_queues[$params['Queue']]['members'][$params['Member']])) {
+            $this->_queues[$params['Queue']]['members'][$params['Member']]['LinkStart'] = NULL;
 
-        if (isset($this->_queues[$params['Queue']]['members'][$agentmember])) {
-            $this->_queues[$params['Queue']]['members'][$agentmember]['LinkStart'] = NULL;
-
-            $this->_log->output('WARN: '.__METHOD__.': si se encuentra miembro '.$agentmember.
-                ' en cola '.$params['Queue']);
             // La actualización de Status debería hacerse en un QueueMemberStatus próximo
         } else {
-            $this->_log->output('WARN: '.__METHOD__.': no se encuentra miembro '.$agentmember.
+            $this->_log->output('WARN: '.__METHOD__.': no se encuentra miembro '.$params['Member'].
                 ' en cola '.$params['Queue']);
         }
     }
@@ -320,25 +279,15 @@ class QueueShadow
         // Cola validada que tiene eventwhencalled activo
         $this->_queues[$params['Queue']]['eventwhencalled'] = TRUE;
 
-        if(isset($params['Member'])) {
-            $agentmember = $params['Member'];
-        } else {
-            // Asterisk 13
-            // We must set the agent name to be Agent/xxxx in the agent configuration
-            $agentmember = $params['MemberName'];
-        }
-
-        if (isset($this->_queues[$params['Queue']]['members'][$agentmember])) {
-            $this->_queues[$params['Queue']]['members'][$agentmember]['LinkStart'] = $params['local_timestamp_received'];
-
-$this->_log->output('WARN: '.__METHOD__.': se  encuentra miembro '.$agentmember.  ' en cola '.$params['Queue']. '  y se le pone linkstart en '.$params['local_timestamp_received']);
+        $params['Member'] = isset($params['Member'])?$params['Member']:$params['Interface'];
+        if (isset($this->_queues[$params['Queue']]['members'][$params['Member']])) {
+            $this->_queues[$params['Queue']]['members'][$params['Member']]['LinkStart'] = $params['local_timestamp_received'];
 
             // La actualización de Status debería hacerse en un QueueMemberStatus próximo
         } else {
-            $this->_log->output('WARN: '.__METHOD__.': no se encuentra miembro '.$agentmember.
+            $this->_log->output('WARN: '.__METHOD__.': no se encuentra miembro '.$params['Member'].
                 ' en cola '.$params['Queue']);
         }
- 
     }
 
     function msg_AgentDump($params)
