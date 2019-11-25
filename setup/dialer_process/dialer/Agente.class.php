@@ -2,9 +2,10 @@
 /* vim: set expandtab tabstop=4 softtabstop=4 shiftwidth=4:
   Codificación: UTF-8
   +----------------------------------------------------------------------+
-  | Issabel version 1.2-2                                               |
+  | Issabel version 4.0                                                  |
   | http://www.issabel.org                                               |
   +----------------------------------------------------------------------+
+  | Copyright (c) 2019 Issabel Foundation                                |
   | Copyright (c) 2006 Palosanto Solutions S. A.                         |
   +----------------------------------------------------------------------+
   | The contents of this file are subject to the General Public License  |
@@ -19,8 +20,8 @@
   +----------------------------------------------------------------------+
   | The Initial Developer of the Original Code is PaloSanto Solutions    |
   +----------------------------------------------------------------------+
-  $Id: DialerProcess.class.php,v 1.48 2009/03/26 13:46:58 alex Exp $ */
-
+  $Id: Agente.class.php, Mon 25 Nov 2019 04:22:41 PM EST, nicolas@issabel.com
+*/
 define('AST_DEVICE_NOTINQUEUE', -1);
 define('AST_DEVICE_UNKNOWN',    0);
 define('AST_DEVICE_NOT_INUSE',  1);
@@ -381,7 +382,7 @@ class Agente
     {
         $ami->asyncQueuePause(
             array($this, '_cb_QueuePause'),
-            array($this->channel, $nstate),
+            array($this->channel, $nstate, $reason, $ami),
             $queue, $this->channel, $nstate, $reason);
     }
 
@@ -630,12 +631,21 @@ class Agente
         }
     }
 
-    public function _cb_QueuePause($r, $sAgente, $nstate)
+    public function _cb_QueuePause($r, $sAgente, $nstate, $reason, $ami)
     {
         if ($r['Response'] != 'Success') {
             $this->_log->output('ERR: '.__METHOD__.' (internal) no se puede '.
                 ($nstate ? 'pausar' : 'despausar').' al agente '.$sAgente.': '.
                 $sAgente.' - '.$r['Message']);
+        } else {
+            $partes = preg_split("/\//",$sAgente);
+            $numAgente = $partes[1];
+            $epoch = time(); 
+            if($nstate==1) {
+                $ami->database_put('PAUSECUSTOM','AGENT/'.$numAgente,"$reason:$epoch");
+            } else {
+                $ami->database_del('PAUSECUSTOM','AGENT/'.$numAgente);
+            }
         }
     }
 }
