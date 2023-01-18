@@ -536,9 +536,6 @@ PETICION_CAMPANIAS_ENTRANTES;
 
         // TODO: colocar código de detección de conflicto de agentes
 
-$pepe = $iNumLlamadasColocar;
-
-/*
 
         // En Asterisk13 el Originate Response llega tarde, luego de que el llamado termina, no podemos considerar que está pendiente
         // Por ese motivo comentamos por ahora este bloque, para ver cual es el mejor curso de accion en el futuro y evitar
@@ -559,7 +556,7 @@ $pepe = $iNumLlamadasColocar;
                 $iNumLlamadasColocar = 0;
             }
         }
-*/
+
         if (count($listaLlamadasAgendadas) <= 0 && $iNumLlamadasColocar <= 0) {
             if ($this->DEBUG) {
                 $this->_log->output("DEBUG: ".__METHOD__." (campania {$infoCampania['id']} cola ".
