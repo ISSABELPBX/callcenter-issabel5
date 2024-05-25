@@ -13,46 +13,7 @@ It uses the [Asterisk©](http://www.asterisk.org/ "Asterisk Home Page") open sou
 Call Center
 ----
 
-Call Center module for Issabel. Changes to make it work with Asterisk 13
-
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=A44XMWDSCVTL6)
-
-Manual Modifications for Testing
-----
-
-In order to test, some changes are needed in the Asterisk dialplan, in
-/etc/asterisk/extensions_custom.conf create a new context:
-
-```
-[agents]
-exten = _X.,1,NoOp()
-same = n,AgentRequest(${EXTEN})
-same = n,Congestion()
-```
-
-This context will be used to dial to a particular logged in Agent.
-
-Then in agents.conf you must use this format for agents:
-
-```
-[1000]
-fullname=Pedro
-autologoff=15
-ackcall=yes
-acceptdtmf=##
-```
-
-Finally you should add agents into queues with a special format. From
-the Asterisk CLI you can try something like this:
-
-```
-queue add member Local/1000@agents/n to 2000 penalty 0 as "Agente 1000" state_interface Agent:1000
-```
-
-
-> This is a work in progress. It might not work at all. If you want to move this project/work forward
-> you are welcome to collaborate
-
+Call Center module for Issabel.
 
 
 License
@@ -72,4 +33,16 @@ GPLv2 or Later
 
 >You should have received a copy of the GNU General Public License
 >along with this program; if not, write to the Free Software
->Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+>Foundation, Inc., 51 Franklin Street, Fifth Floor, Bosto
+
+
+
+Callcenter Issabel 5
+==========
+
+Version callccenter 4.0.0.5, actualizada para Instalar en rocky 8 , con version php 7 , en mode callback. 
+
+esta version puede ser instalada en asterisk 16 o 18 en IssabelPBX 
+
+#### Version actualizada por la comunidad de Issabel, cualquier duda o problema escribir a https://t.me/IssabelPBXip:
+Gracias a la colaboracion de Nicolás Gudiño, Julio pacheco, y comunidad de Issabel en telegram
