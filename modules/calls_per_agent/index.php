@@ -155,6 +155,33 @@ function _moduleContent(&$smarty, $module_name)
             formatoSegundos($cdr['avg_duration']),
             formatoSegundos($cdr['max_duration']),
         );
+
+                if ($cdr['type'] === 'Inbound'){
+        $inbound = TRUE;
+        $arrDataInbound[] = array(
+            $cdr['agent_number'],
+            htmlspecialchars($cdr['agent_name'], ENT_COMPAT, 'UTF-8'),
+            $cdr['type'],
+            $cdr['queue'],
+            $cdr['num_answered'],
+            formatoSegundos($cdr['sum_duration']),
+            formatoSegundos($cdr['avg_duration']),
+            formatoSegundos($cdr['max_duration']),
+        );
+        } 
+        if ($cdr['type'] === 'Outbound'){
+        $outbound = TRUE;
+        $arrDataOutbound[] = array(
+            $cdr['agent_number'],
+            htmlspecialchars($cdr['agent_name'], ENT_COMPAT, 'UTF-8'),
+            $cdr['type'],
+            $cdr['queue'],
+            $cdr['num_answered'],
+            formatoSegundos($cdr['sum_duration']),
+            formatoSegundos($cdr['avg_duration']),
+            formatoSegundos($cdr['max_duration']),
+        );    
+        }
     
         $sumCallAnswered += $cdr['num_answered'];   // Total de llamadas contestadas
         $sumDuration += $cdr['sum_duration'];       // Total de segundos en llamadas
@@ -186,7 +213,146 @@ function _moduleContent(&$smarty, $module_name)
     $oGrid->setNameFile_Export(_tr("Calls per Agent"));
      
     $smarty->assign("SHOW", _tr("Show"));
-    return $oGrid->fetchGrid();    
+    $agentTable = $oGrid->fetchGrid();
+
+    $table = $agentTable;
+
+    if ($inbound) {
+        $inboundGraph = callsGraphics($arrDataInbound, "inbound");
+        $table .= "<div style='text-align: center; padding: 20px; border: solid; border-radius: 10px;'>";
+        $table .= "<h2 style='color: #333;'>Inbound Campaigns</h2>";
+        $table .= $inboundGraph;
+        $table .= "</div>";
+        $table .= "<br>";
+    }
+    if ($outbound){
+        $outboundGraph = callsGraphics($arrDataOutbound, "outbound");
+        $table .= "<div style='text-align: center; padding: 20px; border: solid; border-radius: 10px;'>";
+        $table .= "<h2 style='color: #333;'>Outbound Campaigns</h2>";
+        $table .= $outboundGraph;
+        $table .= "</div>";
+        $table .= "<br>";
+    }
+
+
+    return $table;    
+}
+
+function callsGraphics($callsInfo, $type){
+    // Preparar datos para Highcharts
+    $labels         = [];
+    $numAnswered    = [];
+    $count          = 0;
+    $totalCalls     = 0;
+
+    // Array asociativo para almacenar respuestas acumuladas por etiqueta
+    $accumulatedAnswers = [];
+
+    foreach ($callsInfo as $data) {
+        $count++;
+        $totalCalls     += (int) $data[4];
+        $label          = "(" . $data[0] . ")  " . htmlspecialchars($data[1], ENT_QUOTES, 'UTF-8');
+
+        if (!isset($accumulatedAnswers[$label])) {
+            // Si la etiqueta no existe en el array, la inicializa con el valor actual
+            $accumulatedAnswers[$label] = (int) $data[4];
+        } else {
+            // Si la etiqueta ya existe, suma el valor actual al acumulado
+            $accumulatedAnswers[$label] += (int) $data[4];
+        }
+    }
+
+    if ($count <= 4){
+        $height = $count * 50;
+    } else if ($count <= 10){
+        $height = $count * 60;
+    } else {
+        $height = $count * 70;
+    }
+
+    // Convertir el array asociativo a los arreglos necesarios para Chart.js
+    foreach ($accumulatedAnswers as $label => $answered) {
+        $percentage = ($totalCalls > 0) ? ($answered / $totalCalls) * 100 : 0;
+        $color = getColorBasedOnPercentage($percentage);
+
+        $labels[] = $label;
+        $numAnswered[] = [
+            'value' => $answered,
+            'color' => $color,
+            'percentage' => $percentage,
+        ];
+    }
+
+    
+    $chartData = [
+        'labels' => $labels,
+        'numAnswered' => $numAnswered,
+    ];
+
+// Función alternativa a array_column para versiones de PHP anteriores a 5.5
+if (!function_exists('array_column')) {
+    function array_column($array, $column) {
+        $result = array();
+        foreach ($array as $row) {
+            if (isset($row[$column])) {
+                $result[] = $row[$column];
+            }
+        }
+        return $result;
+    }
+}
+
+$chartScript = "
+<script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
+    <canvas id='chart-container-".$type."' style='width: 100%; height: ".$height."px;'></canvas>
+    <script>
+        var totalCalls = " . $totalCalls . "; // Obtén el valor total de llamadas
+        var ctx = document.getElementById('chart-container-".$type."').getContext('2d');
+        var myChart = new Chart(ctx, {
+        type: 'bar',  // Mantén 'bar' como tipo de gráfico
+        data: {
+            labels: " . json_encode($chartData['labels']) . ",
+            datasets: [{
+                label: 'Calls Answered',
+                data: " . json_encode(array_column($chartData['numAnswered'], 'value')) . ",
+                backgroundColor: " . json_encode(array_column($chartData['numAnswered'], 'color')) . ",
+                borderColor: 'rgba(0,0,0)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: 'y',  // Configura el eje horizontal
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    max: ".$totalCalls." // Configura el valor máximo del eje y
+                },
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+</script>
+";
+
+    return $chartScript;
+}
+
+function getColorBasedOnPercentage($percentage) {
+    if ($percentage >= 0 && $percentage < 10) {
+        return 'rgba(255, 0, 0, 0.2)'; // Rojo
+    } elseif ($percentage >= 10 && $percentage < 25) {
+        return 'rgba(255, 165, 0, 0.2)'; // Naranjo
+    } elseif ($percentage >= 25 && $percentage < 40) {
+        return 'rgba(255, 255, 0, 0.2)'; // Amarillo
+    } elseif ($percentage >= 40 && $percentage < 60) {
+        return 'rgba(173, 255, 47, 0.2)'; // Verde Amarillo
+    } elseif ($percentage >= 60 && $percentage <= 100) {
+        return 'rgba(0, 128, 0, 0.2)'; // Verde
+    } else {
+        return 'rgba(0, 0, 0, 0.2)'; // Por defecto, negro
+    }
 }
 
 function formatoSegundos($iSeg)
