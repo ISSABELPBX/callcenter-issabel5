@@ -67,7 +67,8 @@ function form_Configuration(&$oDB, $smarty, $module_name, $local_templates_dir)
     $smarty->assign("REQUIRED_FIELD", _tr("Required field"));
     $smarty->assign("icon", "images/list.png");
 
-    $objConfig =& new PaloSantoConfiguration($oDB);
+// modified by Pajulio,  =& resplace by = //
+    $objConfig = new PaloSantoConfiguration($oDB);
     $listaConf = $objConfig->ObtainConfiguration();
     
 //    print_r($listaConf);
