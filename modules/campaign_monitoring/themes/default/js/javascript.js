@@ -25,6 +25,10 @@ if (!Function.prototype.bind) {
 
 var module_name = 'campaign_monitoring';
 var App = null;
+var idCampaign = '';
+var paramsType = '';
+var count = '';
+
 
 //Redireccionar la página entera en caso de que la sesión se haya perdido
 function verificar_error_session(respuesta)
@@ -88,6 +92,9 @@ $(document).ready(function() {
 					mostrar_mensaje_error(respuesta.message);
 					return null;
 				}
+				paramsType = params.type;
+				idCampaign = params.id_campaign;
+				count = 0;
 				return App.CampaignDetails.create({
 					type:				params.type,
 					id_campaign:		params.id_campaign,
@@ -256,20 +263,16 @@ $(document).ready(function() {
 					clientstatehash: this.get('estadoClienteHash')
 				};
 
-			if (window.EventSource) {
-				params['serverevents'] = true;
+			//if (window.EventSource) {
+				/*params['serverevents'] = true;
 				this.evtSource = new EventSource('index.php?' + $.param(params));
 				this.evtSource.onmessage = function(event) {
 					this.manejarRespuestaStatus($.parseJSON(event.data));
 				}.bind(this);
 				this.evtSource.onerror = function(event) {
-					/* NO QUIERO REINTENTOS EN CASO DE ERROR: para cuando se
-					 * realiza el reintento, se lo hace con el mismo hash que
-					 * se usó iniciamente, pero ese hash ya no es válido porque
-					 * el estado es volátil. */
 					event.target.close();
 				}.bind(this);
-			} else {
+			} else {*/
 				this.longPoll = $.get('index.php', params, function (respuesta) {
 					verificar_error_session(respuesta);
 					if (this.manejarRespuestaStatus(respuesta)) {
@@ -277,7 +280,7 @@ $(document).ready(function() {
 						setTimeout(this.do_checkstatus.bind(this), 1);
 					}
 				}.bind(this), 'json');
-			}
+			//}
 		},
 		manejarRespuestaStatus: function(respuesta) {
 			// Intentar recargar la página en caso de error
@@ -369,34 +372,165 @@ $(document).ready(function() {
 					}
 				}
 			}
+
+
+
+			
 			
 			// Lista de los agentes que atienden llamada
 			if (respuesta.agents != null && respuesta.agents.add != null)
+				// Logica para mantener las horas de las ultimas llamadas contestadas de los agentes
+				if (count === 0){
+					var agentesLastCall = this.agentes;
+					var queue = this.content.cola;
+					if (paramsType === "outgoing") {
+						//console.log("queue_id", params.id_campaign);
+						lastCallOutgoing(idCampaign, respuesta.agents, agentesLastCall, queue);
+					}
+					if (paramsType === "incoming") {
+						//console.log("queue_id", params.id_campaign);
+						lastCallIncoming(idCampaign, respuesta.agents, agentesLastCall, queue);
+					}
+					count++;
+				}
 			for (var i = 0; i < respuesta.agents.add.length; i++) {
-				var agente = respuesta.agents.add[i];
-				this.agentes.addObject(Ember.Object.create({
-					canal:		agente.agent,
-					numero:		agente.callnumber,
-					troncal:	agente.trunk,
-					estado:		agente.status,
-					desde:		agente.desde,
-					rtime:		new Date(),
-					reciente:	true
-				}));
+				  var agente = respuesta.agents.add[i];
+				  const agentUpdate = agentUpdateColor(agente.status, agente.agent);
+				  this.agentes.addObject(Ember.Object.create({
+				    canal:     agente.agent,
+				    numero:    agente.callnumber,
+				    troncal:   agente.trunk,
+				    estado:    agente.status,
+				    image: 	   Ember.String.htmlSafe(agentUpdate.statusImage),
+				    desde:     agente.desde,
+				    rtime:     new Date(),
+				    reciente:  true
+				  }));
+				  agentColor(agente.status, agente.agent);
+				}
+
+			// Lista de agentes cuando actualizan sus estados
+			if (respuesta.agents != null && respuesta.agents.update != null) {
+			    for (var i = 0; i < respuesta.agents.update.length; i++) {
+			        var agente = respuesta.agents.update[i];
+			        const agentUpdate = agentUpdateColor(agente.status, agente.agent);
+			        var agenteLista = this.agentes.findBy('canal', agente.agent);
+			        //console.log(agenteLista);
+			        if (agenteLista != null) {
+			            agenteLista.setProperties({
+			                'numero':   agente.callnumber,
+			                'troncal':  agente.trunk,
+			                'estado':   agente.status,
+			                'image':    Ember.String.htmlSafe(agentUpdate.statusImage),
+			                'desde':    agente.desde,
+			                'rtime':    new Date(),
+			                'reciente': true
+			            });
+
+			            // Verificar si el estado del agente es "Busy"
+			            if (agente.status === 'Busy' || agente.status === 'Ocupado' || agente.status === 'Occupé' || agente.status === 'Занят' || agente.status === 'Meşgul') {
+			                // Cambiar todos los agentes con estado "Ringing" a "Free"
+			                this.agentes.forEach(function(otroAgente) {
+			                	if (otroAgente.get('estado') === 'Ringing' && otroAgente.get('desde') !== '-') {
+			                        const otroAgentUpdate = agentUpdateColor('Free', otroAgente.get('canal'));
+			                        otroAgente.setProperties({
+			                            'estado': 'Free',
+			                            'image': Ember.String.htmlSafe(otroAgentUpdate.statusImage),
+			                            'numero':   "-",
+			                            'troncal':   "-",
+			                            //'desde':   agente.desde,
+			                        });
+			                    }
+			                    if (otroAgente.get('estado') === 'Ringing' && otroAgente.get('desde') === '-') {
+			                        const otroAgentUpdate = agentUpdateColor('Free', otroAgente.get('canal'));
+			                        otroAgente.setProperties({
+			                            'estado': 'Free',
+			                            'image': Ember.String.htmlSafe(otroAgentUpdate.statusImage),
+			                            'numero':   "-",
+			                            'troncal':   "-",
+			                            'desde':   agente.desde,
+			                        });
+			                    } 
+			                });
+			            }
+			        }
+			    }
 			}
-			if (respuesta.agents != null && respuesta.agents.update != null)
-			for (var i = 0; i < respuesta.agents.update.length; i++) {
-				var agente = respuesta.agents.update[i];
-				var agenteLista = this.agentes.findBy('canal', agente.agent);
-				if (agenteLista != null) agenteLista.setProperties({
-					'numero':	agente.callnumber,
-					'troncal':	agente.trunk,
-					'estado':	agente.status,
-					'desde':	agente.desde,
-					'rtime':	new Date(),
-					'reciente':	true
-				});
-			}
+			
+			// Llamadas Entrantes
+			if (respuesta.agents.add.length === 0 && respuesta.agents.remove.length === 0 && respuesta.agents.update.length === 0 && respuesta.activecalls.remove.length === 0 && respuesta.activecalls.add.length !== 0)
+				for (var i = 0; i < this.agentes.length; i++) {
+					var agente = this.agentes[i]
+					//console.log(agente.estado);
+					if (agente.estado === "Free" || agente.estado === "Libre" || agente.estado === "Свободен" || agente.estado === "Boşta") {
+						const agentUpdate = agentUpdateColor("Ringing", agente.canal);
+						var agenteLista = this.agentes.findBy('canal', agente.canal);
+						//console.log(this);
+						//console.log(agenteLista);
+							if (agenteLista != null) agenteLista.setProperties({
+								'numero':	this.llamadasMarcando[0].numero,
+								'troncal':	this.llamadasMarcando[0].troncal,
+								'estado':	"Ringing",
+								'image': 	Ember.String.htmlSafe(agentUpdate.statusImage),
+								//'desde':	this.llamadasMarcando[0].desde,
+								'rtime':	new Date(),
+								'reciente':	true
+							});
+						
+					}
+					
+				}
+			
+			// Terminando llamada
+			if (respuesta.agents.add.length === 0 && respuesta.agents.remove.length === 0 && respuesta.agents.update.length === 0 && respuesta.activecalls.remove.length !== 0)
+			for (var i = 0; i < this.agentes.length; i++) {
+					var agente = this.agentes[i]
+					if (agente.estado === "Ringing") {
+						//console.log(this);
+						//agente.estado = "Free";
+						const agentUpdate = agentUpdateColor("Free", agente.canal);
+						var agenteLista = this.agentes.findBy('canal', agente.canal);
+						//console.log(agenteLista);
+							if (agenteLista != null) agenteLista.setProperties({
+								'numero':	agente.callnumber,
+								'troncal':	agente.trunk,
+								'estado':	"Free",
+								'image': 	Ember.String.htmlSafe(agentUpdate.statusImage),
+								'desde':	agente.desde,
+								'rtime':	new Date(),
+								'reciente':	true
+							});
+						
+					}
+					
+				}
+
+			//Si se esta hablando mientras recarga la pagina setea el ringing a los agentes que se vean como free si hay una llamada esperando ser contestada
+			if (respuesta.agents.add.length !== 0 && respuesta.agents.remove.length === 0 && respuesta.agents.update.length === 0 && respuesta.activecalls.add.length !== 0)
+				for (var i = 0; i < this.agentes.length; i++) {
+					var agente = this.agentes[i]
+					if (agente.estado === "Free" || agente.estado === "Libre" || agente.estado === "Свободен" || agente.estado === "Boşta") {
+					agente.estado = "Ringing";
+					//console.log(respuesta);
+					const agentUpdate = agentUpdateColor("Ringing", agente.canal);
+					var agenteLista = this.agentes.findBy('canal', agente.canal);
+						if (agenteLista != null) agenteLista.setProperties({
+							'numero':	this.llamadasMarcando[0].numero,
+							'troncal':	this.llamadasMarcando[0].troncal,
+							'estado':	"Ringing",
+							'image': 	Ember.String.htmlSafe(agentUpdate.statusImage),
+							'desde':	agente.desde,
+							'rtime':	new Date(),
+							'reciente':	true
+						});
+						agentColor(agente.estado, agente.canal);
+					}
+				}
+			
+
+
+
+			// Lista de agentes cuando se desconectan
 			if (respuesta.agents != null && respuesta.agents.remove != null)
 			for (var i = 0; i < respuesta.agents.remove.length; i++) {
 				var agentchannel = respuesta.agents.remove[i].agent;
@@ -534,4 +668,176 @@ function mostrar_mensaje_error(s)
 			$('#issabel-callcenter-error-message').fadeOut();
 		}, 5000);
 	});
+}
+
+
+function agentColor(status, canal) {
+setTimeout(() => {
+
+  if (status.includes('On break') || status.includes('En descanso') || status.includes('En pause') || status.includes('На перерыве') || status.includes('Molada')) {
+    color = 'orange';
+  } else {
+    switch (status) {
+      case 'Ringing':
+        color = '#a6db14';
+        break;
+      case 'Free':
+      case 'Libre':
+      case 'Свободен':
+      case 'Boşta':
+        color = '#01D50A';
+        break;
+      case 'Busy':
+      case 'Ocupado':
+      case 'Occupé':
+      case 'Занят':
+      case 'Meşgul':
+        color = 'yellow';
+        break;
+      case 'Unavailable':
+      case 'Logged out':
+      case 'No logon':
+      case 'Déconnecté':
+      case 'Вышел':
+      case 'Yok':
+        color = '#f33';
+        break;
+      default:
+        color = 'white';
+        break;
+    }
+  }
+
+    const elements = document.getElementsByClassName(canal);
+    for (let i = 0; i < elements.length; i++) {
+      elements[i].style.backgroundColor = color;
+      //console.log(elements.length);
+    }
+	}, 100);
+}
+
+function agentUpdateColor(status, canal) {
+  let statusImage;
+
+  if (status.includes('On break') || status.includes('En descanso') || status.includes('En pause') || status.includes('На перерыве') || status.includes('Molada')) {
+    color = 'orange';
+    statusImage = '<img src="/modules/' + module_name + '/images/agent-break.png" alt="En Break" style="padding-right:1px;"/>';
+  } else {
+    switch (status) {
+      case 'Ringing':
+        color = '#a6db14';
+        statusImage = '<img src="/modules/' + module_name + '/images/agent-ringing.gif" alt="Desconectado" style="padding-right:1px;"/>';
+        break;
+      case 'Free':
+      case 'Libre':
+      case 'Свободен':
+      case 'Boşta':
+        color = '#01D50A';
+        statusImage = '<img src="/modules/' + module_name + '/images/agent-available.png" alt="Disponible" style="padding-right:1px;"/>';
+        break;
+      case 'Busy':
+      case 'Ocupado':
+      case 'Occupé':
+      case 'Занят':
+      case 'Meşgul':
+        color = 'yellow';
+        statusImage = '<img src="/modules/' + module_name + '/images/agent-busy.png" alt="Ocupado" style="padding-right:1px;"/>';
+        break;
+      case 'Logged out':
+      case 'No logon':
+      case 'Déconnecté':
+      case 'Вышел':
+      case 'Yok':
+        color = '#f33';
+        statusImage = '<img src="/modules/' + module_name + '/images/agent-disconected.png" alt="Desconectado" style="padding-right:1px;"/>';
+        break;
+      default:
+        color = 'white';
+        statusImage = '';
+        break;
+    }
+  }
+
+const elements = document.getElementsByClassName(canal);
+for (let i = 0; i < elements.length; i++) {
+    elements[i].style.backgroundColor = color;
+  }
+  return { statusImage};
+}
+
+function lastCallIncoming(id_campaign, respuesta, agentes, queue) {
+    fetch('/modules/' + module_name + '/libs/api.php?id_campaignIncoming=' + id_campaign + '&queue=' + queue)
+        .then(response => response.json())
+        .then(data => {
+        	//console.log(data);
+           var listaLastCall = data.listaLastCall;
+           var unavailables = data.unavailables;
+            for (var i = 0; i < respuesta.add.length; i++) {
+                var agente = respuesta.add[i];
+                var agenteLista = agentes.findBy('canal', agente.agent);
+                var lastCallTime = listaLastCall.find(item => item.agent === agente.agent);
+                var unavailableAgent = unavailables.find(item => item.agent === agente.agent);
+                //console.log(lastCallTime);
+                //console.log(agenteLista);
+                var properties = {
+			        'reciente': true
+			    };
+			    if (agenteLista != null) {
+			        if (lastCallTime != null) {
+			            properties.desde = lastCallTime.lastCall;
+			            if (unavailableAgent) {
+			                agentColor('Unavailable', agente.agent);
+			                properties.estado = "Phone Off";
+			            }
+			        } else {
+			            properties.desde = "No calls";
+			            if (unavailableAgent) {
+			                agentColor('Unavailable', agente.agent);
+			                properties.estado = "Phone Off";
+			            }
+			        }
+			        agenteLista.setProperties(properties);
+			    }
+            }
+        })
+        .catch(error => console.error('Error in fetch:', error));
+}
+
+function lastCallOutgoing(id_campaign, respuesta, agentes, queue){
+	console.log(respuesta);
+	fetch('/modules/' + module_name + '/libs/api.php?id_campaignOutgoing=' + id_campaign + '&queue=' + queue)
+        .then(response => response.json())
+        .then(data => {
+        	//console.log(data);
+           var listaLastCall = data.listaLastCall;
+           var unavailables = data.unavailables;
+            for (var i = 0; i < respuesta.add.length; i++) {
+                var agente = respuesta.add[i];
+                var agenteLista = agentes.findBy('canal', agente.agent);
+                var lastCallTime = listaLastCall.find(item => item.agent === agente.agent);
+                var unavailableAgent = unavailables.find(item => item.agent === agente.agent);
+                //console.log(lastCallTime);
+                //console.log(agenteLista);
+                var properties = {
+			        'reciente': true
+			    };
+			    if (agenteLista != null) {
+			        if (lastCallTime != null) {
+			            properties.desde = lastCallTime.lastCall;
+			            if (unavailableAgent) {
+			                agentColor('Unavailable', agente.agent);
+			                properties.estado = "Phone Off";
+			            }
+			        } else {
+			            properties.desde = "No calls";
+			            if (unavailableAgent) {
+			                agentColor('Unavailable', agente.agent);
+			                properties.estado = "Phone Off";
+			            }
+			        }
+			        agenteLista.setProperties(properties);
+			    }
+            }
+        })
+        .catch(error => console.error('Error in fetch:', error));
 }

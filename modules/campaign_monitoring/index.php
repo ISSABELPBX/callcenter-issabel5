@@ -157,12 +157,15 @@ function manejarMonitoreo_getCampaigns($module_name, $smarty, $sDirLocalPlantill
         usort($listaCampanias, 'manejarMonitoreo_getCampaigns_sort');
         $respuesta['campaigns'] = array();
         foreach ($listaCampanias as $c) {
+            //este if quita las colas de la campaña callcenter ya que no reflejan nada en el mismo callcenter y solo se reflejan los valores de campañas.
+            if ($c['type'] !== "incomingqueue"){
             $respuesta['campaigns'][] = array(
                 'id_campaign'   => $c['id'],
                 'desc_campaign' => '('._tr($c['type']).') '.$c['name'],
                 'type'          =>  $c['type'],
                 'status'        =>  $c['status'],
             );
+            }
         }
     }
     $json = new Services_JSON();

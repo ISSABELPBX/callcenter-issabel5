@@ -39,7 +39,7 @@ div.llamadas
 {
     overflow-y: auto;
     /*width: 100%;*/
-    background-color: #f0f0f0;
+    background-color: white;
     border: 1px solid #999999;
 }
 div.llamadas table 
@@ -55,10 +55,103 @@ div.llamadas table > tbody > tr:hover
 div.llamadas table > tbody > tr > td
 {
 	padding: 6px;
-	color: #555555;
+	color: black;
 	border-bottom: 1px #b6b6b6 solid;
 }
 .reciente
 {
 	font-weight: bold;
+}
+
+.flex-container {
+    display: flex;
+    justify-content: space-between;
+    width: 50%;
+}
+
+.campaign-table {
+    width: 45%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+.campaign-table-outgoing {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+.table-header {
+  margin-top: 0px;
+  border: solid 1px #000000;
+  line-height: 1.6;
+  font-size: 15px;
+  background-color: #0f0f0f8c;
+  color: white;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.table-label {
+	width: 60%;
+    font-weight: bold;
+}
+
+.table-label-out {
+	width: 40%;
+    font-weight: bold;
+}
+
+.data-out {
+	width: 10%;
+}
+
+.empty-cell {
+    /* Ajusta el espacio entre las celdas vacías según sea necesario */
+    width: 5%;
+}
+
+#campaignMonitoringApplication {
+  border: 1px solid #707070;
+  border-radius: 5px;
+  padding: 20px;
+  background-color: #f2f2f2;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.circle {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  margin-right: 2px;
+  border: 1px solid black;
+  text-align: center;
+}
+
+select {
+  border: 1px solid #4CAF50;
+  color: #333;
+  font-size: 15px;
+  font-weight: bold;
+  line-height: 1.5;
+  padding: 5px;
+  margin: 0;
+  border-radius: 4px;
+  background-color: #fff;
+  cursor: pointer;
+  transition: border-color 0.3s ease-in-out;
+}
+
+select:hover,
+select:focus {
+  border-color: #4CAF50;
+  outline: none;
+}
+
+.trAgent {
+display: flex;
+align-items: center;
+min-width: 20%;
+
 }
