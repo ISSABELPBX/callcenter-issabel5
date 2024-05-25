@@ -75,7 +75,7 @@ class paloSantoCampaignCC
         $sPeticionSQL = <<<SQL_SELECT_CAMPAIGNS
 SELECT id, name, trunk, context, queue, datetime_init, datetime_end, daytime_init,
     daytime_end, script, retries, promedio, num_completadas, estatus, max_canales,
-    id_url
+    id_url, id_url2, id_url3
 FROM campaign
 SQL_SELECT_CAMPAIGNS;
         $paramWhere = array();
@@ -123,7 +123,7 @@ SQL_SELECT_CAMPAIGNS;
      * @return  int    El ID de la campaña recién creada, o NULL en caso de error
      */
     function createEmptyCampaign($sNombre, $iMaxCanales, $iRetries, $sTrunk, $sContext, $sQueue,
-        $sFechaInicial, $sFechaFinal, $sHoraInicio, $sHoraFinal, $script, $id_url)
+        $sFechaInicial, $sFechaFinal, $sHoraInicio, $sHoraFinal, $script, $id_url , $id_url2, $id_url3)
     {
         $id_campaign = NULL;
         $bExito = FALSE;
@@ -176,6 +176,10 @@ SQL_SELECT_CAMPAIGNS;
             $this->errMsg = _tr('Start Time must be greater than End Time');//'Hora de inicio debe ser anterior a la hora final';
         } elseif (!is_null($id_url) && !ctype_digit("$id_url")) {
             $this->errMsg = _tr('(internal) Invalid URL ID');
+        } elseif (!is_null($id_url2) && !ctype_digit("$id_url2")) {
+            $this->errMsg = _tr('(internal) Invalid URL ID');
+        } elseif (!is_null($id_url3) && !ctype_digit("$id_url3")) {
+            $this->errMsg = _tr('(internal) Invalid URL ID');
         } elseif (in_array($sQueue, $colasEntrantes)) {
              $this->errMsg =  _tr('Queue is being used, choose other one');//La cola ya está siendo usada, escoja otra
         } else {
@@ -191,12 +195,12 @@ SQL_SELECT_CAMPAIGNS;
             // Construir y ejecutar la orden de inserción SQL
             $sPeticionSQL = <<<SQL_INSERT_CAMPAIGN
 INSERT INTO campaign (name, max_canales, retries, trunk, context, queue,
-    datetime_init, datetime_end, daytime_init, daytime_end, script, id_url)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    datetime_init, datetime_end, daytime_init, daytime_end, script, id_url, id_url2, id_url3)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 SQL_INSERT_CAMPAIGN;
             $paramSQL = array($sNombre, $iMaxCanales, $iRetries, $sTrunk,
                 $sContext, $sQueue, $sFechaInicial, $sFechaFinal, $sHoraInicio,
-                $sHoraFinal, $script, $id_url);
+                $sHoraFinal, $script, $id_url, $id_url2, $id_url3);
             if ($this->_DB->genQuery($sPeticionSQL, $paramSQL)) {
             	// Leer el ID insertado por la operación
                 $id_campaign = $this->_DB->getLastInsertId();
@@ -334,7 +338,7 @@ SQL_INSERT_CAMPAIGN;
      */
     function updateCampaign($idCampaign, $sNombre, $iMaxCanales, $iRetries, $sTrunk,
         $sContext, $sQueue, $sFechaInicial, $sFechaFinal, $sHoraInicio, $sHoraFinal,
-        $script, $id_url)
+        $script, $id_url, $id_url2, $id_url3)
     {
 
         $bExito = FALSE;
@@ -375,6 +379,10 @@ SQL_INSERT_CAMPAIGN;
             $this->errMsg = _tr('Start Time must be greater than End Time');//'Hora de inicio debe ser anterior a la hora final';
         } elseif (!is_null($id_url) && !ctype_digit("$id_url")) {
             $this->errMsg = _tr('(internal) Invalid URL ID');
+        } elseif (!is_null($id_url2) && !ctype_digit("$id_url2")) {
+            $this->errMsg = _tr('(internal) Invalid URL ID');
+        } elseif (!is_null($id_url3) && !ctype_digit("$id_url3")) {
+            $this->errMsg = _tr('(internal) Invalid URL ID');
         } else {
 
             // Construir y ejecutar la orden de update SQL
@@ -382,12 +390,12 @@ SQL_INSERT_CAMPAIGN;
 UPDATE campaign SET
     name = ?, max_canales = ?, retries = ?, trunk = ?,
     context = ?, queue = ?, datetime_init = ?, datetime_end = ?,
-    daytime_init = ?, daytime_end = ?, script = ?, id_url = ?
+    daytime_init = ?, daytime_end = ?, script = ?, id_url = ?, id_url2 = ?, id_url3 = ?
 WHERE id = ?
 SQL_UPDATE_CAMPAIGN;
             $paramSQL = array($sNombre, $iMaxCanales, $iRetries, $sTrunk,
                 $sContext, $sQueue, $sFechaInicial, $sFechaFinal,
-                $sHoraInicio, $sHoraFinal, $script, $id_url,
+                $sHoraInicio, $sHoraFinal, $script, $id_url, $id_url2, $id_url3,
                 $idCampaign);
             if ($this->_DB->genQuery($sPeticionSQL, $paramSQL)) return TRUE;
             $this->errMsg = $this->_DB->errMsg;
@@ -634,4 +642,101 @@ SQL_DATOS_FORM;
         return $datosCampania;
     }
 }
+
+
+function checkDataBase(){
+
+        if (is_readable("/etc/amportal.conf")) {
+            $amp_conf   = amportal_conf("/etc/amportal.conf");
+            $DBHOST     = $amp_conf['AMPDBHOST'];
+            $DBNAME     = "call_center";
+            $DBUSER     = $amp_conf['AMPDBNAME'];
+            $DBPASS     = $amp_conf['AMPDBNAME'];
+            $AMPDBPASS  = $amp_conf['AMPDBPASS'];
+
+        $conn = new mysqli($DBHOST, $DBUSER, $DBPASS, $DBNAME);
+
+        // Verificar la conexión
+        if ($conn->connect_error) {
+            die("Error de conexión: " . $conn->connect_error);
+        }
+
+        // Consulta para verificar la existencia de las columnas id_url2 e id_url3
+        $query = "SELECT COLUMN_NAME
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_NAME = 'campaign'
+          AND COLUMN_NAME IN ('id_url2', 'id_url3')";
+
+        $result = $conn->query($query);
+
+        // Verificar el resultado de la consulta
+        if ($result) {
+            $existingColumns = $result->fetch_assoc();
+
+            // Verificar si la columna id_url2 no existe
+            if (!$existingColumns) {
+
+                    $rutaArchivo = '/etc/issabel.conf';
+                    if (file_exists($rutaArchivo)) {
+                        // Leer el contenido del archivo
+                        $contenido = file_get_contents($rutaArchivo);
+
+                        // Expresión regular para obtener lo que viene después del signo igual (=)
+                        $patron = '/mysqlrootpwd=(.+)/';
+
+                        // Realizar la búsqueda en el contenido del archivo
+                        preg_match($patron, $contenido, $coincidencias);
+
+                        // Obtener el resultado
+                        $AMPDBPASS = $coincidencias[1];
+                    }
+                    
+                    $conn->close();
+                    $grantCommand = "mysql -u root -p$AMPDBPASS -e \"GRANT ALTER ON \`call_center\`.* TO '$DBUSER'@'$DBHOST'; FLUSH PRIVILEGES;\"";
+                    exec($grantCommand);
+
+                    $conn = new mysqli($DBHOST, $DBUSER, $DBPASS, $DBNAME);
+
+                    $alterQuery = "ALTER TABLE `campaign`
+                                   ADD COLUMN `id_url2` INT(10) UNSIGNED NULL DEFAULT NULL,
+                                   ADD COLUMN `id_url3` INT(10) UNSIGNED NULL DEFAULT NULL,
+                                   ADD INDEX `id_url2` (`id_url2`) USING BTREE,
+                                   ADD INDEX `id_url3` (`id_url3`) USING BTREE,
+                                   ADD CONSTRAINT `campaign_ibfk_2` FOREIGN KEY (`id_url2`) REFERENCES `call_center`.`campaign_external_url` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
+                                   ADD CONSTRAINT `campaign_ibfk_3` FOREIGN KEY (`id_url3`) REFERENCES `call_center`.`campaign_external_url` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT";
+
+                    if ($conn->query($alterQuery)) {
+                        // Comando para revocar permisos de ALTER (opcional, según tus necesidades)
+                        $revokeCommand = "mysql -u root -p$AMPDBPASS -e \"REVOKE ALTER ON \`call_center\`.* FROM '$DBUSER'@'$DBHOST'; FLUSH PRIVILEGES;\"";
+                        $revokeAlter = exec($revokeCommand);
+                    } 
+            }
+        }
+        // Cerrar la conexión a la base de datos
+        $conn->close();
+        }
+}
+
+function amportal_conf($filename) {
+
+    $file = file($filename);
+    if (is_array($file)) {
+        foreach ($file as $line) {
+            if (preg_match("/^\s*([^=]*)\s*=\s*[\"']?([\w\/\:\.\,\}\{\>\<\(\)\*\?\%!=\+\#@&\\$-]*)[\"']?\s*([;].*)?/",$line,$matches)) {
+                if(preg_match('/\$amp_conf/',$matches[1])) {
+                    $matches[1] = preg_replace('/\$amp_conf\[\'/','',$matches[1]);
+                    $matches[1] = preg_replace('/\$amp_conf\["/','',$matches[1]);
+                    $matches[1] = trim($matches[1]);
+                    $matches[1] = substr($matches[1],0,-2);
+                }
+                $matches[1] = trim($matches[1]);
+                $conf[ $matches[1] ] = trim($matches[2]);
+            }
+        }
+    } else {
+        die("<h1>".sprintf("Missing or unreadable config file (%s)...cannot continue", $filename)."</h1>");
+    }
+    return $conf;
+}
+
 ?>
