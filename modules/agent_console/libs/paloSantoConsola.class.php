@@ -644,6 +644,7 @@ class PaloSantoConsola
         } else try {
             $oECCP = $this->_obtenerConexion('ECCP');
             $respuesta = $oECCP->getcampaigninfo($sCallType, $iCampaignId);
+            //var_dump($respuesta);
             if (isset($respuesta->failure)) {
                 $this->errMsg = _tr('Unable to read call information').' - '.$this->_formatoErrorECCP($respuesta);
                 return NULL;
@@ -685,7 +686,9 @@ class PaloSantoConsola
             foreach (array('name', 'type', 'startdate', 'enddate',
                 'working_time_starttime', 'working_time_endtime', 'queue',
                 'retries', 'context', 'maxchan', 'status', 'script', 'forms',
-                'urltemplate', 'urlopentype') as $k)
+                'urltemplate', 'urldescription', 'urlopentype',
+                'urltemplate2', 'urldescription2', 'urlopentype2',
+                'urltemplate3', 'urldescription3', 'urlopentype3') as $k)
                 if (!isset($reporte[$k]) || $reporte[$k] == '') $reporte[$k] = NULL;
             return $reporte;
         } catch (Exception $e) {

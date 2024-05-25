@@ -73,29 +73,47 @@
 	        <button id="btn_logout" class="issabel-callcenter-boton-activo">{$BTN_FINALIZAR_LOGIN}</button>
 	    </div> {* issabel-callcenter-controles *}
 	    {* El panel que aparece a la derecha como área principal del módulo *}
-	    <div id="issabel-callcenter-contenido">
-			{* Definición de las cejillas de información/script/formulario *}
-			<div id="issabel-callcenter-cejillas-contenido">
-			   <ul>
-                   <li><a href="#issabel-callcenter-llamada-paneles">{$TAB_LLAMADA}</a></li>
-                   {foreach from=$CUSTOM_PANELS item=HTML_PANEL}
-                   <li><a href="#tabs-{$HTML_PANEL.panelname}">{$HTML_PANEL.title}</a></li>
-                   {/foreach}
-			   </ul>
-                <div id="issabel-callcenter-llamada-paneles">
-                    <div id="issabel-callcenter-llamada-paneles-izq" class="ui-layout-west">
-                        <div class="ui-layout-center"><fieldset class="ui-widget-content ui-corner-all"><legend><b>{$TAB_LLAMADA_INFO}</b></legend><div id="issabel-callcenter-llamada-info">{$CONTENIDO_LLAMADA_INFORMACION}</div></fieldset></div>
-                        <div class="ui-layout-south"><fieldset class="ui-widget-content ui-corner-all"><legend><b>{$TAB_LLAMADA_SCRIPT}</b></legend><div id="issabel-callcenter-llamada-script">{$CONTENIDO_LLAMADA_SCRIPT}</div></fieldset></div>
+        
+    	    <div id="issabel-callcenter-contenido">
+                <div class="left-container" id="left-container">
+    			{* Definición de las cejillas de información/script/formulario *}
+    			<div id="issabel-callcenter-cejillas-contenido">
+    			   <ul>
+                       <li><a href="#issabel-callcenter-llamada-paneles">{$TAB_LLAMADA}</a></li>
+                       {foreach from=$CUSTOM_PANELS item=HTML_PANEL}
+                       <li><a href="#tabs-{$HTML_PANEL.panelname}">{$HTML_PANEL.title}</a></li>
+                       {/foreach}
+    			   </ul>
+                    <div id="issabel-callcenter-llamada-paneles">
+                        <div id="issabel-callcenter-llamada-paneles-izq" class="ui-layout-west">
+                            <div class="ui-layout-center"><fieldset class="ui-widget-content ui-corner-all"><legend><b>{$TAB_LLAMADA_INFO}</b></legend><div id="issabel-callcenter-llamada-info">{$CONTENIDO_LLAMADA_INFORMACION}</div></fieldset></div>
+                            <div class="ui-layout-south"><fieldset class="ui-widget-content ui-corner-all"><legend><b>{$TAB_LLAMADA_SCRIPT}</b></legend><div id="issabel-callcenter-llamada-script">{$CONTENIDO_LLAMADA_SCRIPT}</div></fieldset></div>
+                        </div>
+                        <div class="ui-layout-center"><fieldset class="ui-widget-content ui-corner-all"><legend><b>{$TAB_LLAMADA_FORM}</b></legend><div id="issabel-callcenter-llamada-form">{$CONTENIDO_LLAMADA_FORMULARIO}</div></fieldset></div>
                     </div>
-                    <div class="ui-layout-center"><fieldset class="ui-widget-content ui-corner-all"><legend><b>{$TAB_LLAMADA_FORM}</b></legend><div id="issabel-callcenter-llamada-form">{$CONTENIDO_LLAMADA_FORMULARIO}</div></fieldset></div>
+                    {foreach from=$CUSTOM_PANELS item=HTML_PANEL}
+                    <div id="tabs-{$HTML_PANEL.panelname}">
+                        {$HTML_PANEL.content}
+                    </div>
+                    {/foreach}
+    			</div>{* issabel-callcenter-cejillas-contenido *}
                 </div>
-                {foreach from=$CUSTOM_PANELS item=HTML_PANEL}
-                <div id="tabs-{$HTML_PANEL.panelname}">
-                    {$HTML_PANEL.content}
+    		</div>{* issabel-callcenter-contenido *}
+            
+            {if $webRTC}
+                    <div class="webPhoneContainer" id="webPhoneContainer">    
+                        {include file="/var/www/html/modules/webphone/webRTC_CC/webRTC.php"}
+                    </div>
+                <div class="right-container">
+                    <li class="webPhonePanel">
+                        <div class="webPhonePosition" id="webPhonePosition">
+                            <dt>Web Phone</dt>
+                        </div>
+                    </li>
                 </div>
-                {/foreach}
-			</div>{* issabel-callcenter-cejillas-contenido *}
-		</div>{* issabel-callcenter-contenido *}
+            {/if}
+
+
 	</div>
 </div>{* issabel-callcenter-area-principal *}
 <div id="issabel-callcenter-seleccion-break" title="{$TITLE_BREAK_DIALOG}">
@@ -211,5 +229,12 @@ $(document).ready(function() {
     initialize_client_state({$INITIAL_CLIENT_STATE});
 {literal}
 });
+
+    var container = $('#webPhoneContainer');
+    var positionDiv = $('#webPhonePosition');
+
+    if (container.is(':hidden')) {
+        container.appendTo(positionDiv).show();
+    }
 </script>
 {/literal}

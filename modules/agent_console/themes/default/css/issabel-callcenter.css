@@ -64,11 +64,11 @@ td.issabel-callcenter-class-estado-activo {
 }
 
 #issabel-callcenter-controles {
-    position: absolute;
-    padding: 3pt;
+    /*position: absolute;
     left: 0;
     top: 0;
-    right: 0;
+    right: 0;*/
+    padding: 3pt;
     height: 22pt;
     display: inline-block;
 }
@@ -80,11 +80,15 @@ td.issabel-callcenter-class-estado-activo {
     left: 0;
     right: 0;
     bottom: 0;
-    top: 28pt;
+    /*top: 28pt;*/
+    width: 69%;
 }
 
+
+
 #issabel-callcenter-cejillas-contenido {
-    position: absolute;
+    /*position: absolute;*/
+    position: relative;
     left: 0;
     top: 0;
     right: 0;
@@ -161,4 +165,151 @@ td.issabel-callcenter-class-estado-activo {
     bottom: 0.5em;
     left: 0.5em;
     right: 0.5em;
+}
+
+
+#cc_contenido_webphone {
+    display: flex;
+    flex-direction: row;
+}
+
+.right-container {
+    margin-left: auto; /* Alinea a la derecha automáticamente */
+    width: 30%; /* Ajusta el ancho según tus necesidades, pero asegúrate de que no sea mayor al 30% */
+    min-width: 470px;
+}
+
+.webPhoneContainer {
+    height: 100%;
+    width: 99%; /* Ajusta el ancho según tus necesidades */
+    display: none;
+    border: 2px solid #000;
+    border-radius: 5px;
+    background-color: #fdfffd;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+    list-style-type: none;
+    font-family: "Arial", sans-serif;
+    color: #333;
+}
+
+.webPhonePanel {
+  padding: 5px;
+  width: auto;
+  height: auto;
+  border: 1px solid #707070; /* Color plomo para el contorno */
+  border-radius: 5px; /* Bordes redondeados para un aspecto elegante */
+  background-color: #cecece; /* Color de fondo si lo deseas */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Sombra para dar profundidad */
+  list-style-type: none;
+  font-family: "Arial", sans-serif; /* Fuente elegante, puedes cambiarla si lo deseas */
+  color: #333; /* Color de texto */
+  font-size: 15px;
+  height: 390px;
+}
+
+.webPhonePosition {
+    height: 350px;
+    width: 100%;
+
+}
+
+.webPhonePosition dt {
+    margin-top: 0px;
+    border: solid 1px #000000;
+    padding: 4px 10px 4px 10px;
+    line-height: 1.6;
+    font-size: 13px;
+    z-index: 2;
+    background-color: #0f0f0f8c;
+    color: white;
+    margin-bottom: 5px;
+    cursor: pointer;
+}
+
+.issabel-callcenter-field {
+    font-size: 15px !important; /* Tamaño de la fuente */
+    width: 100%;
+    /* Otros estilos que desees aplicar */
+}
+
+
+/* Media query para pantallas más pequeñas (responsive) */
+@media only screen and (max-width: 1399px) {
+    .left-container, .right-container {
+        float: none;
+        width: 100%;
+    }
+    #issabel-callcenter-contenido {
+        width: 100%;
+        position: relative;
+    }
+}
+
+@media only screen and (min-width: 1400px) and (max-width: 1479px) {
+    .left-container {
+        width: 85%;
+    }
+
+    .right-container {
+        width: 35%;
+    }
+}
+
+@media only screen and (min-width: 1480px) and (max-width: 1599px) {
+    .left-container {
+        width: 85%;
+    }
+
+    .right-container {
+        width: 35%;
+    }
+}
+
+@media only screen and (min-width: 1600px) and (max-width: 1659px) {
+    .left-container {
+        width: 90%;
+    }
+
+    .right-container {
+        width: 30%;
+    }
+}
+
+@media only screen and (min-width: 1660px) and (max-width: 1749px) {
+    .left-container {
+        width: 63%;
+    }
+
+    .right-container {
+        width: 30%;
+    }
+}
+
+@media only screen and (min-width: 1750px) and (max-width: 1900px) {
+    .left-container {
+        width: 95%;
+    }
+
+    .right-container {
+        width: 30%;
+    }
+}
+
+
+.externalurl-btn {
+    background-color: #4CAF50; /* Color de fondo verde */
+    color: white; /* Color del texto blanco */
+    border: none; /* Sin borde */
+    padding: 7px 10px; /* Espaciado interno */
+    text-align: center; /* Alineación del texto al centro */
+    text-decoration: none; /* Sin subrayado de texto */
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer; /* Cambiar el cursor al pasar sobre el botón */
+}
+
+/* Estilo cuando pasas el ratón sobre el botón */
+.externalurl-btn:hover {
+    background-color: #45a049;
 }

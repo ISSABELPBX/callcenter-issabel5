@@ -34,6 +34,8 @@ var evtSource = null;
 // Copia del URL a cargar al agregar la nueva cejilla
 var jqueryui_tabs_use_refresh = true;
 var externalurl = null;
+var externalurl2 = null;
+var externalurl3 = null;
 var externalurl_title = null;
 
 $(document).ready(function() {
@@ -75,6 +77,12 @@ $(document).ready(function() {
             if (externalurl != null)
                 $(ui.panel).append("<iframe scrolling=\"auto\" height=\"450\" frameborder=\"0\" width=\"100%\" src=\"" + externalurl + "\" />");
             externalurl = null;
+            if (externalurl2 != null)
+                $(ui.panel).append("<iframe scrolling=\"auto\" height=\"450\" frameborder=\"0\" width=\"100%\" src=\"" + externalurl2 + "\" />");
+            externalurl2 = null;
+            if (externalurl3 != null)
+                $(ui.panel).append("<iframe scrolling=\"auto\" height=\"450\" frameborder=\"0\" width=\"100%\" src=\"" + externalurl3 + "\" />");
+            externalurl3 = null;
         }
     });
 
@@ -225,7 +233,11 @@ function initialize_client_state(nuevoEstado)
     setTimeout(do_checkstatus, 1);
 
     iniciar_cronometro((nuevoEstado.timer_seconds !== '') ? nuevoEstado.timer_seconds : null);
-    abrir_url_externo(nuevoEstado.urlopentype, nuevoEstado.url);
+    abrir_url_externo3(nuevoEstado.urlopentype3, nuevoEstado.url3, nuevoEstado.urldescription3);
+    abrir_url_externo2(nuevoEstado.urlopentype2, nuevoEstado.url2, nuevoEstado.urldescription2);
+    abrir_url_externo(nuevoEstado.urlopentype, nuevoEstado.url, nuevoEstado.urldescription);
+    
+    
 }
 
 // Inicializar el cronómetro con el valor de segundos indicado
@@ -647,41 +659,43 @@ function do_ping()
 
 function do_checkstatus()
 {
-	params = {
-		menu:		module_name,
-		rawmode:	'yes',
-		action:		'checkStatus',
-		clientstate: estadoCliente
-	};
-	if (window.EventSource) {
-		params['serverevents'] = true;
-		evtSource = new EventSource('index.php?' + $.param(params));
-		evtSource.onmessage = function(event) {
-			manejarRespuestaStatus($.parseJSON(event.data));
-		}
-		evtSource.onerror = function(event) {
-			mostrar_mensaje_error('Lost connection to server (SSE), retrying...');
-		}
+    params = {
+        menu:       module_name,
+        rawmode:    'yes',
+        action:     'checkStatus',
+        clientstate: estadoCliente
+    };
+    /*if (window.EventSource) {
+       params['serverevents'] = true;
+        evtSource = new EventSource('index.php?' + $.param(params));
+        evtSource.onmessage = function(event) {
+            manejarRespuestaStatus($.parseJSON(event.data));
+        }
+        evtSource.onerror = function(event) {
+            mostrar_mensaje_error('Lost connection to server (SSE), retrying...');
+        }
 
-		// Iniciar el ping de inmediato
-		setTimeout(do_ping, 1);
-	} else {
-		$.post('index.php?menu=' + module_name + '&rawmode=yes', params,
-		function (respuesta) {
-			verificar_error_session(respuesta);
-			manejarRespuestaStatus(respuesta);
+        // Iniciar el ping de inmediato
+        setTimeout(do_ping, 1);
+    } else {*/
+        $.post('index.php?menu=' + module_name + '&rawmode=yes', params,
+        function (respuesta) {
+            verificar_error_session(respuesta);
+            manejarRespuestaStatus(respuesta);
 
-			// Lanzar el método de inmediato
-			setTimeout(do_checkstatus, 1);
-		}, 'json').fail(function() {
-			mostrar_mensaje_error('Lost connection to server (Long-Polling), retrying...');
-			setTimeout(do_checkstatus, 5000);
-		});
-	}
+            // Lanzar el método de inmediato
+            setTimeout(do_checkstatus, 1);
+        }, 'json').fail(function() {
+            mostrar_mensaje_error('Lost connection to server (Long-Polling), retrying...');
+            setTimeout(do_checkstatus, 5000);
+        });
+    //}
 }
+
 
 function manejarRespuestaStatus(respuesta)
 {
+    //console.log(respuesta);
 	for (var i in respuesta) {
 		if (respuesta[i].txt_estado_agente_inicial != null)
 			$('#issabel-callcenter-estado-agente-texto').text(respuesta[i].txt_estado_agente_inicial);
@@ -766,7 +780,21 @@ function manejarRespuestaStatus(respuesta)
 
 			apply_form_styles();
 		    $('#btn_guardar_formularios').button('enable');
-			abrir_url_externo(respuesta[i].urlopentype, respuesta[i].url);
+            console.log(respuesta[i]);
+            if (!respuesta[i].urlopentype3){
+                respuesta[i].urlopentype3 = "DELETE";
+            }
+            abrir_url_externo3(respuesta[i].urlopentype3, respuesta[i].url3, respuesta[i].urldescription3);
+
+            if (!respuesta[i].urlopentype2){
+                respuesta[i].urlopentype2 = "DELETE";
+            }
+            abrir_url_externo2(respuesta[i].urlopentype2, respuesta[i].url2, respuesta[i].urldescription2);
+
+            if (!respuesta[i].urlopentype){
+                respuesta[i].urlopentype = "DELETE";
+            }
+			abrir_url_externo(respuesta[i].urlopentype, respuesta[i].url, respuesta[i].urldescription);
 			break;
 		case 'agentunlinked':
 	        // El agente se ha desconectado de la llamada
@@ -817,9 +845,8 @@ function mostrar_mensaje_error(s)
 	});
 }
 
-function abrir_url_externo(urlopentype, url)
+function abrir_url_externo(urlopentype, url, title)
 {
-	if (urlopentype != null) {
 		switch (urlopentype) {
 		case 'iframe':
 			if (jqueryui_tabs_use_refresh) {
@@ -827,11 +854,15 @@ function abrir_url_externo(urlopentype, url)
 		    	$('#issabel-callcenter-cejillas-contenido').find('.ui-tabs-nav li.tab-externalurl').remove();
 			    $('#tabs-externalurl').remove();
 
+                if ($('#externalurl-btn').length) {
+                    $('#externalurl-btn').remove();
+                }
+
 			    // Se agrega la nueva cejilla, si existe
 			    if (url != null) {
 			        $('#issabel-callcenter-cejillas-contenido').append(
 			            '<div id="tabs-externalurl"><iframe scrolling="auto" height="450" frameborder="0" width="100%" src="' + url + '" /></div>');
-			        $('<li class="tab-externalurl"><a href="#tabs-externalurl">'+externalurl_title+'</a></li>')
+			        $('<li class="tab-externalurl"><a href="#tabs-externalurl">'+title+'</a></li>')
 			            .appendTo('#issabel-callcenter-cejillas-contenido > .ui-tabs-nav');
 			    }
 
@@ -840,7 +871,7 @@ function abrir_url_externo(urlopentype, url)
 		    } else {
                 externalurl = url;
                 $('#issabel-callcenter-cejillas-contenido').tabs('remove', '#tabs-externalurl');
-                $('#issabel-callcenter-cejillas-contenido').tabs('add', '#tabs-externalurl', externalurl_title);
+                $('#issabel-callcenter-cejillas-contenido').tabs('add', '#tabs-externalurl', title);
 		    }
 			break;
 		case 'jsonp':
@@ -850,9 +881,152 @@ function abrir_url_externo(urlopentype, url)
 			});
 			break;
 		case 'window':
-		default:
-			window.open(url, '_blank');
-			break;
+            // Se quita la cejilla anterior. Se asume que se fue marcada con la clase .tab-externalurl
+            $('#issabel-callcenter-cejillas-contenido').find('.ui-tabs-nav li.tab-externalurl').remove();
+            $('#tabs-externalurl').remove();
+
+            // Eliminar cualquier botón existente antes de agregar uno nuevo
+            $('#externalurl-btn').remove();
+
+            // Se agrega la nueva cejilla, si existe
+            if (url != null) {
+                $('<button id="externalurl-btn" class="externalurl-btn">' + title + '</button>')
+                    .appendTo('#issabel-callcenter-cejillas-contenido > .ui-tabs-nav');
+
+                // Agregar evento de clic al botón
+                $('#externalurl-btn').on('click', function () {
+                    if (url) {
+                        window.open(url, '_blank');
+                    }
+                });
+            }
+            break;
+        default:
+            break;
 		}
-	}
+}
+
+function abrir_url_externo2(urlopentype, url2, title)
+{
+    if (urlopentype != null) {
+        switch (urlopentype) {
+        case 'iframe':
+            if (jqueryui_tabs_use_refresh) {
+                // Se quita la cejilla anterior. Se asume que se fue marcada con clase .externalurl
+                $('#issabel-callcenter-cejillas-contenido').find('.ui-tabs-nav li.tab-externalurl2').remove();
+                $('#tabs-externalurl2').remove();
+
+                if ($('.externalurl2-btn').length) {
+                    $('.externalurl2-btn').remove();
+                }
+
+                // Se agrega la nueva cejilla, si existe
+                if (url2 != null) {
+                    $('#issabel-callcenter-cejillas-contenido').append(
+                        '<div id="tabs-externalurl2"><iframe scrolling="auto" height="450" frameborder="0" width="100%" src="' + url2 + '" /></div>');
+                    $('<li class="tab-externalurl2"><a href="#tabs-externalurl2">'+title+'</a></li>')
+                        .appendTo('#issabel-callcenter-cejillas-contenido > .ui-tabs-nav');
+                }
+
+                // Aplicar cambios
+                $('#issabel-callcenter-cejillas-contenido').tabs('refresh');
+            } else {
+                externalurl2 = url2;
+                $('#issabel-callcenter-cejillas-contenido').tabs('remove', '#tabs-externalurl2');
+                $('#issabel-callcenter-cejillas-contenido').tabs('add', '#tabs-externalurl2', title);
+            }
+            break;
+        case 'jsonp':
+            $.ajax(url2, {
+                dataType: 'jsonp',
+                context:    document
+            });
+            break;
+        case 'window':
+        default:
+            // Se quita la cejilla anterior. Se asume que se fue marcada con la clase .tab-externalurl
+            $('#issabel-callcenter-cejillas-contenido').find('.ui-tabs-nav li.tab-externalurl2').remove();
+            $('#tabs-externalurl2').remove();
+
+            // Eliminar cualquier botón existente antes de agregar uno nuevo
+            $('#externalurl2-btn').remove();
+
+            // Se agrega la nueva cejilla, si existe
+            if (url2 != null) {
+                // Agregar el botón con un ID
+                $('<button id="externalurl2-btn" class="externalurl-btn">' + title + '</button>')
+                    .appendTo('#issabel-callcenter-cejillas-contenido > .ui-tabs-nav');
+
+                // Agregar evento de clic al botón
+                $('#externalurl2-btn').on('click', function () {
+                    if (url2) {
+                        window.open(url2, '_blank');
+                    }
+                });
+            }
+            break;
+        }
+    }
+}
+
+function abrir_url_externo3(urlopentype, url3, title)
+{
+    if (urlopentype != null) {
+        switch (urlopentype) {
+        case 'iframe':
+            if (jqueryui_tabs_use_refresh) {
+                // Se quita la cejilla anterior. Se asume que se fue marcada con clase .externalurl
+                $('#issabel-callcenter-cejillas-contenido').find('.ui-tabs-nav li.tab-externalurl3').remove();
+                $('#tabs-externalurl3').remove();
+
+                if ($('.externalurl3-btn').length) {
+                    $('.externalurl3-btn').remove();
+                }
+
+                // Se agrega la nueva cejilla, si existe
+                if (url3 != null) {
+                    $('#issabel-callcenter-cejillas-contenido').append(
+                        '<div id="tabs-externalurl3"><iframe scrolling="auto" height="450" frameborder="0" width="100%" src="' + url3 + '" /></div>');
+                    $('<li class="tab-externalurl3"><a href="#tabs-externalurl3">'+title+'</a></li>')
+                        .appendTo('#issabel-callcenter-cejillas-contenido > .ui-tabs-nav');
+                }
+
+                // Aplicar cambios
+                $('#issabel-callcenter-cejillas-contenido').tabs('refresh');
+            } else {
+                externalurl3 = url3;
+                $('#issabel-callcenter-cejillas-contenido').tabs('remove', '#tabs-externalurl3');
+                $('#issabel-callcenter-cejillas-contenido').tabs('add', '#tabs-externalurl3', title);
+            }
+            break;
+        case 'jsonp':
+            $.ajax(url3, {
+                dataType: 'jsonp',
+                context:    document
+            });
+            break;
+        case 'window':
+        default:
+            // Se quita la cejilla anterior. Se asume que se fue marcada con la clase .tab-externalurl
+            $('#issabel-callcenter-cejillas-contenido').find('.ui-tabs-nav li.tab-externalurl3').remove();
+            $('#tabs-externalurl3').remove();
+
+            // Eliminar cualquier botón existente antes de agregar uno nuevo
+            $('#externalurl3-btn').remove();
+
+            // Se agrega la nueva cejilla, si existe
+            if (url3 != null) {
+                $('<button id="externalurl3-btn" class="externalurl-btn">' + title + '</button>')
+                    .appendTo('#issabel-callcenter-cejillas-contenido > .ui-tabs-nav');
+
+                // Agregar evento de clic al botón
+                $('#externalurl3-btn').on('click', function () {
+                    if (url3) {
+                        window.open(url3, '_blank');
+                    }
+                });
+            }
+            break;
+        }
+    }
 }

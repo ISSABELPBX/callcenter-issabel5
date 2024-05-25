@@ -46,15 +46,21 @@ function _tr($s)
 * Ejemplo: $nombre = getParameter('nombre');
 */
 if (!function_exists('getParameter')) {
-function getParameter($parameter)
-{
-    if(isset($_POST[$parameter]))
-        return $_POST[$parameter];
-    else if(isset($_GET[$parameter]))
-        return $_GET[$parameter];
-    else
-        return null;
-}
+    function getParameter($parameter)
+    {
+         $rutaArchivo = '/var/www/html/modules/agent_console/mi_archivo.txt';
+            $archivo = fopen($rutaArchivo, 'w');
+            fwrite($archivo, implode(', ', $parameter) . PHP_EOL);
+            // Cerrar el archivo
+            fclose($archivo);
+        if(isset($_POST[$parameter])) 
+            return $_POST[$parameter];
+        else if(isset($_GET[$parameter])) 
+            return $_GET[$parameter];
+        else 
+            return null;
+        
+    }
 }
 
 /**

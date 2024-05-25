@@ -24,7 +24,12 @@ require_once "libs/paloSantoForm.class.php";
 require_once "libs/paloSantoTrunk.class.php";
 require_once "libs/paloSantoConfig.class.php";
 require_once '/var/lib/asterisk/agi-bin/phpagi-asmanager.php';
+require_once "libs/paloSantoJSON.class.php";
+require_once "libs/paloSantoDB.class.php";
 
+$webphonePassword = '';
+$webphoneName = '';
+$extension = '';
 
 define ('AGENT_CONSOLE_DEBUG_LOG', FALSE);
 
@@ -32,11 +37,42 @@ function _moduleContent(&$smarty, $module_name)
 {
     global $arrConf;
     global $arrLang;
+    global $webphonePassword;
+    global $webphoneName;
+    global $extension;
 
     require_once "modules/$module_name/libs/issabel2.lib.php";
     require_once "modules/$module_name/libs/paloSantoConsola.class.php";
     require_once "modules/$module_name/configs/default.conf.php";
     require_once "modules/$module_name/libs/JSON.php";
+
+
+    $pDB = new paloDB($arrConf['issabel_dsn']['acl']);
+    $pACL = new paloACL($pDB);
+    $user = $_SESSION['issabel_user'];
+    $extension = $pACL->getUserExtension($user);
+    $dsn1 = generarDSNSistema('asteriskuser', 'asterisk');
+    $pdbACL1 = new paloDB($dsn1);
+    $base_dir = "/var/www/html";
+
+    $resultado = $pdbACL1->fetchTable("SELECT data from sip WHERE id = '$extension' AND keyword = 'transport'");
+    $isWebphone = !empty($resultado) && isset($resultado[0]) ? $resultado[0] : '';
+    $webPhoneFolder = "$base_dir/modules/webphone";
+    $existeWebPhoneFolder = is_dir($webPhoneFolder);
+    //print_r($webPhoneFolder);
+    //print_r($isWebphone[0]);
+        if ($existeWebPhoneFolder) {
+            //$smarty->assign('webRTCFolder', $webPhoneFolder);
+            if (strpos($isWebphone[0], "wss") !== false || strpos($isWebphone[0], "ws") !== false) {
+                $webRTC = true;
+                $smarty->assign('webRTC', $webRTC);
+                $webphonePassword = $pdbACL1->fetchTable("SELECT data from sip WHERE id = '$extension' AND keyword = 'secret'; ")[0];
+                $webphoneName = $pdbACL1->fetchTable("SELECT name from users WHERE extension = '$extension';")[0];
+
+
+        }
+    }
+
 
 
     $astman = new AGI_AsteriskManager();
@@ -183,6 +219,8 @@ function manejarLogin($module_name, &$smarty, $sDirLocalPlantillas)
         break;
     }
 
+    print_r($sAction);
+
     return $sContenido;
 }
 
@@ -239,7 +277,6 @@ function manejarLogin_HTML($module_name, &$smarty, $sDirLocalPlantillas)
             'MSG_ESPERA'                =>  _tr('Logging agent in. Please wait...'),
             'REANUDAR_VERIFICACION'     =>  1,
         ));
-
     } else {
     	/* Si el usuario Issabel logoneado coincide con el número de agente de
          * la lista, se coloca este agente como opción por omisión para login.
@@ -366,12 +403,11 @@ function manejarLogin_doLogin()
         }
     }
 
-    $json = new Services_JSON();
-    $sContenido = $json->encode($respuesta);
-    Header('Content-Type: application/json');
+// modified by Pajulio, Service Json AND return Replace by this code//
+    header('Content-Type: application/json');
+    echo json_encode($respuesta);
     $oPaloConsola->desconectarTodo();
-
-    return $sContenido;
+    exit();
 }
 
 // Procesar requerimiento AJAX para revisar el estado del proceso de login
@@ -466,12 +502,12 @@ function manejarLogin_checkLogin()
         }
     }
 
-    $json = new Services_JSON();
-    $sContenido = $json->encode($respuesta);
-    Header('Content-Type: application/json');
+// modified by Pajulio, Service Json AND return Replace by this code//
+    header('Content-Type: application/json');
+    echo json_encode($respuesta);
     $oPaloConsola->desconectarTodo();
-
-    return $sContenido;
+    exit();
+    
 }
 
 // Procedimiento para decidir qué acción tomar en el estado de sesión activa
@@ -531,6 +567,7 @@ function manejarSesionActiva($module_name, &$smarty, $sDirLocalPlantillas)
         }
         $sContenido = call_user_func($h, $module_name, $smarty, $sDirLocalPlantillas, $oPaloConsola, $estado, $listpanels);
     }
+
     $oPaloConsola->desconectarTodo();
 
     return $sContenido;
@@ -544,10 +581,18 @@ function manejarSesionActiva_unimplemented($module_name, &$smarty, $sDirLocalPla
         'status'    =>  'error',
         'message'   =>  _tr('Unimplemented method'),
     ));
+
 }
 
 function manejarSesionActiva_HTML($module_name, &$smarty, $sDirLocalPlantillas, $oPaloConsola, $estado, $listpanels)
 {
+
+    global $webphonePassword;
+    global $webphoneName;
+    global $extension;
+
+    //var_dump($webphonePassword);
+
     // Incluir bibliotecas javascript de paneles
     $listaLibsJS_modulo = explode("\n", $smarty->get_template_vars('HEADER_MODULES'));
     foreach ($listpanels as $panelname) {
@@ -568,8 +613,7 @@ function manejarSesionActiva_HTML($module_name, &$smarty, $sDirLocalPlantillas, 
     $smarty->assign(array(
         'FRAMEWORK_TIENE_TITULO_MODULO' => existeSoporteTituloFramework(),
         'icon'                          => 'modules/'.$module_name.'/images/call_center.png',
-        'title'                         =>  _tr('Agent Console').': '.
-            $_SESSION['callcenter']['agente_nombre'],
+        'title'                         =>  _tr('Agent Console').': '.$_SESSION['callcenter']['agente_nombre'],
         'BTN_COLGAR_LLAMADA'            =>  _tr('Hangup'),
         'BTN_TRANSFER'                  =>  _tr('Transfer'),
         'BTN_VTIGERCRM'                 =>  file_exists('/var/www/html/vtigercrm') ? _tr('VTiger CRM') : NULL,
@@ -607,15 +651,22 @@ function manejarSesionActiva_HTML($module_name, &$smarty, $sDirLocalPlantillas, 
         'BTN_GUARDAR_FORMULARIOS'       =>  _tr('Save data'),
     ));
     $estadoInicial = array(
-        'onhold'        =>  $estado['onhold'],
-        'break_id'      =>  is_null($estado['pauseinfo']) ? NULL : $estado['pauseinfo']['pauseid'],
-        'calltype'      =>  NULL,
-        'campaign_id'   =>  NULL,
-        'callid'        =>  NULL,
-        'timer_seconds' =>  '',
-        'url'           =>  NULL,
-        'urlopentype'   =>  NULL,
-        'waitingcall'   =>  FALSE,
+        'onhold'            =>  $estado['onhold'],
+        'break_id'          =>  is_null($estado['pauseinfo']) ? NULL : $estado['pauseinfo']['pauseid'],
+        'calltype'          =>  NULL,
+        'campaign_id'       =>  NULL,
+        'callid'            =>  NULL,
+        'timer_seconds'     =>  '',
+        'url'               =>  NULL,
+        'urldescription'    =>  NULL,
+        'urlopentype'       =>  NULL,
+        'url2'              =>  NULL,
+        'urldescription2'   =>  NULL,
+        'urlopentype2'      =>  NULL,
+        'url3'              =>  NULL,
+        'urldescription3'   =>  NULL,
+        'urlopentype3'      =>  NULL,
+        'waitingcall'       =>  FALSE,
     );
 
     // Decidir estado del break a mostrar
@@ -709,14 +760,38 @@ function manejarSesionActiva_HTML($module_name, &$smarty, $sDirLocalPlantillas, 
         $estadoInicial['calltype'] = $estado['callinfo']['calltype'];
         $estadoInicial['campaign_id'] = $estado['callinfo']['campaign_id'];
         $estadoInicial['callid'] = $estado['callinfo']['callid'];
+
         $estadoInicial['urlopentype'] = isset($infoCampania['urlopentype']) ? $infoCampania['urlopentype'] : NULL;
+        $estadoInicial['urldescription'] = isset($infoCampania['urldescription']) ? $infoCampania['urldescription'] : NULL;
         $estadoInicial['url'] = is_null($estadoInicial['urlopentype'])
             ? NULL : construirUrlExterno($infoCampania['urltemplate'], $infoLlamada + array(
-            'callnumber'        =>  $estado['callinfo']['callnumber'],
-            'callid'            =>  $infoLlamada['call_id'],
-            'agent_number'      =>  $estado['callinfo']['agent_number'],
-            'remote_channel'    =>  $estado['callinfo']['remote_channel']),
-            $chanvars);
+                'callnumber'        =>  $estado['callinfo']['callnumber'],
+                'callid'            =>  $infoLlamada['call_id'],
+                'agent_number'      =>  $estado['callinfo']['agent_number'],
+                'remote_channel'    =>  $estado['callinfo']['remote_channel']),
+                $chanvars);
+
+        // Para url2, urldescription2 y urlopentype2
+        $estadoInicial['urlopentype2'] = isset($infoCampania['urlopentype2']) ? $infoCampania['urlopentype2'] : NULL;
+        $estadoInicial['urldescription2'] = isset($infoCampania['urldescription2']) ? $infoCampania['urldescription2'] : NULL;
+        $estadoInicial['url2'] = is_null($estadoInicial['urlopentype2'])
+            ? NULL : construirUrlExterno($infoCampania['urltemplate2'], $infoLlamada + array(
+                'callnumber'        =>  $estado['callinfo']['callnumber'],
+                'callid'            =>  $infoLlamada['call_id'],
+                'agent_number'      =>  $estado['callinfo']['agent_number'],
+                'remote_channel'    =>  $estado['callinfo']['remote_channel']),
+                $chanvars);
+
+        // Para url3, urldescription3 y urlopentype3
+        $estadoInicial['urlopentype3'] = isset($infoCampania['urlopentype3']) ? $infoCampania['urlopentype3'] : NULL;
+        $estadoInicial['urldescription3'] = isset($infoCampania['urldescription3']) ? $infoCampania['urldescription3'] : NULL;
+        $estadoInicial['url3'] = is_null($estadoInicial['urlopentype3'])
+            ? NULL : construirUrlExterno($infoCampania['urltemplate3'], $infoLlamada + array(
+                'callnumber'        =>  $estado['callinfo']['callnumber'],
+                'callid'            =>  $infoLlamada['call_id'],
+                'agent_number'      =>  $estado['callinfo']['agent_number'],
+                'remote_channel'    =>  $estado['callinfo']['remote_channel']),
+                $chanvars);
     } elseif (!is_null($estado['waitedcallinfo'])) {
         $estadoInicial['waitingcall'] = TRUE;
 
@@ -774,6 +849,22 @@ function manejarSesionActiva_HTML($module_name, &$smarty, $sDirLocalPlantillas, 
         }
     }
     $smarty->assign('CUSTOM_PANELS', $htmlpanels);
+
+
+        echo "<script>";
+        echo "localStorage.setItem('mhrgl.com.identity.display_name', $extension);";
+        echo "localStorage.setItem('mhrgl.com.identity.impi', $extension);";
+        echo "localStorage.setItem('mhrgl.com.identity.name', '$webphoneName[0]');";
+        echo "localStorage.setItem('mhrgl.com.identity.impu', 'sip:'+ $extension+'@'+ window.location.hostname);";
+        echo "localStorage.setItem('mhrgl.com.identity.password', '$webphonePassword[0]');";
+        echo "localStorage.setItem('mhrgl.com.identity.realm', window.location.hostname);";
+        echo "localStorage.setItem('mhrgl.com.identity.socket', '8089');";
+        echo "localStorage.setItem('mhrgl.com.expert.disable_video', 'true');";
+        echo "localStorage.setItem('mhrgl.com.expert.disable_callbtn_options', 'true');";
+        echo "localStorage.setItem('mhrgl.com.expert.websocket_server_url', 'wss://' + window.location.hostname + ':8089/ws');";
+        //echo "localStorage.setItem('mhrgl.com.expert.ice_servers', '[]');";
+        echo "localStorage.setItem('mhrgl.com.expert.ice_servers', '[{ url: \'stun:stun.a.google.com:19302\'}]');";
+        echo "</script>";
 
     return $smarty->fetch("$sDirLocalPlantillas/agent_console.tpl");
 }
@@ -1649,18 +1740,30 @@ function construirRespuesta_agentlinked($smarty, $sDirLocalPlantillas,
         'calltype'              =>  $callinfo['calltype'],
         'campaign_id'           =>  $callinfo['campaign_id'],
         'callid'                =>  $callinfo['callid'],
-
         'txt_contacto_telefono' =>  $callinfo['callnumber'],
         'cronometro'            =>  sprintf('%02d:%02d:%02d', ($iDuracionLlamada - ($iDuracionLlamada % 3600)) / 3600, (($iDuracionLlamada - ($iDuracionLlamada % 60)) / 60) % 60, $iDuracionLlamada % 60),
         'llamada_informacion'   =>  _manejarSesionActiva_HTML_generarInformacion($smarty, $sDirLocalPlantillas, $infoLlamada, $infoCampania),
         'llamada_formulario'    =>  _manejarSesionActiva_HTML_generarFormulario($smarty, $sDirLocalPlantillas, $infoLlamada, $infoCampania),
         'llamada_script'        =>  $infoCampania['script'],
         'urlopentype'           =>  isset($infoCampania['urlopentype']) ? $infoCampania['urlopentype'] : NULL,
+        'urldescription'        =>  isset($infoCampania['urldescription']) ? $infoCampania['urldescription'] : NULL,
         'url'                   =>  NULL,
+        'urlopentype2'          =>  isset($infoCampania['urlopentype2']) ? $infoCampania['urlopentype2'] : NULL,
+        'urldescription2'       =>  isset($infoCampania['urldescription2']) ? $infoCampania['urldescription2'] : NULL,
+        'url2'                  =>  NULL,
+        'urlopentype3'          =>  isset($infoCampania['urlopentype3']) ? $infoCampania['urlopentype3'] : NULL,
+        'urldescription3'       =>  isset($infoCampania['urldescription3']) ? $infoCampania['urldescription3'] : NULL,
+        'url3'                  =>  NULL,
     );
 
     if (isset($infoCampania['urltemplate']) && !is_null($infoCampania['urltemplate'])) {
         $registroCambio['url'] = construirUrlExterno($infoCampania['urltemplate'], $infoLlamada, $chanvars);
+    }
+    if (isset($infoCampania['urltemplate2']) && !is_null($infoCampania['urltemplate2'])) {
+        $registroCambio['url2'] = construirUrlExterno($infoCampania['urltemplate2'], $infoLlamada, $chanvars);
+    }
+    if (isset($infoCampania['urltemplate3']) && !is_null($infoCampania['urltemplate3'])) {
+        $registroCambio['url3'] = construirUrlExterno($infoCampania['urltemplate3'], $infoLlamada, $chanvars);
     }
 
     // Asignaciones específicas para llamadas entrantes
@@ -1726,9 +1829,16 @@ function construirRespuesta_agentunlinked()
 function construirRespuesta_waitingenter($oPaloConsola, $waitedcallinfo)
 {
     $registroCambio = array(
-        'event'         =>  'waitingenter',
-        'urlopentype'   =>  NULL,
-        'url'           =>  NULL,
+        'event'             =>  'waitingenter',
+        'urlopentype'       =>  NULL,
+        'urldescription'    =>  NULL,
+        'url'               =>  NULL,
+        'urlopentype2'      =>  NULL,
+        'urldescription2'   =>  NULL,
+        'url2'              =>  NULL,
+        'urlopentype3'      =>  NULL,
+        'urldescription3'   =>  NULL,
+        'url3'              =>  NULL,
         // Etiquetas a modificar en la interfaz
         //'txt_btn_hold' =>  _tr('End Hold'),
     );
@@ -1758,6 +1868,7 @@ function construirUrlExterno($s, $infoLlamada, $chanvars)
         '{__CALL_ID__}'         =>  $infoLlamada['callid'],
         '{__PHONE__}'           =>  $infoLlamada['callnumber'],
         '{__UNIQUEID__}'        =>  $infoLlamada['uniqueid'],
+        '{__AGENT__}'           =>  trim(substr($_SESSION['callcenter']['agente_nombre'], strpos($_SESSION['callcenter']['agente_nombre'], '-') +1)),
     );
     if (is_array($chanvars)) foreach ($chanvars as $k => $v) {
     	$reemplazos['{'.$k.'}'] = $v;
