@@ -21,7 +21,7 @@ fi
 
 cd /usr/src
 rm -rf callcenter
-git clone https://github.com/${GITHUB_ACCOUNT}/callcenter-issabel5.git callcenter-issabel5 2>&1 >/dev/null
+git clone https://github.com/${GITHUB_ACCOUNT}/callcenter-issabel5.git callcenter 2>&1 >/dev/null
 cd /usr/src/callcenter
 chown asterisk.asterisk modules/* -R
 cp -pr modules/* /var/www/html/modules
