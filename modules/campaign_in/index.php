@@ -41,6 +41,7 @@ function _moduleContent(&$smarty, $module_name)
     include_once "modules/$module_name/configs/default.conf.php";
     global $arrConf;
 
+    checkDataBase();
     // Se fusiona la configuración del módulo con la configuración global
     $arrConf = array_merge($arrConf, $arrConfModule);
 
@@ -80,7 +81,7 @@ function _moduleContent(&$smarty, $module_name)
 function listCampaign($pDB, $smarty, $module_name, $local_templates_dir)
 {
     global $arrLang;
-    $arrData = '';
+    $arrData = array();
     $oCampaign = new paloSantoIncomingCampaign($pDB);
 
     // Recoger ID de campaña para operación
@@ -343,7 +344,10 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
             } else {
                 $values_form = explode(",", $_POST['values_form']);
             }
+                //var_dump($arrCampaign);
             if (!isset($_POST['external_url']))        $_POST['external_url']        = $arrCampaign[0]['id_url'];
+            if (!isset($_POST['external_url2']))        $_POST['external_url2']        = $arrCampaign[0]['id_url2'];
+            if (!isset($_POST['external_url3']))        $_POST['external_url3']        = $arrCampaign[0]['id_url3'];
         }
 
         // rte_script es un HTML complejo que debe de construirse con Javascript.
@@ -420,7 +424,9 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
                                             $time_fin,
                                             $_POST['rte_script'],
                                             NULL,
-                                            ($_POST['external_url'] == '') ? NULL : (int)$_POST['external_url']);
+                                            ($_POST['external_url'] == '') ? NULL : (int)$_POST['external_url'],
+                                            ($_POST['external_url2'] == '') ? NULL : (int)$_POST['external_url2'],
+                                            ($_POST['external_url3'] == '') ? NULL : (int)$_POST['external_url3']);
                             if (is_null($id_campaign)) $bExito = FALSE;
                         } elseif ($bDoUpdate) {
                             $bExito = $oCamp->updateCampaign(
@@ -433,7 +439,9 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
                                             $time_fin,
                                             $_POST['rte_script'],
                                             NULL,
-                                            ($_POST['external_url'] == '') ? NULL : (int)$_POST['external_url']);
+                                            ($_POST['external_url'] == '') ? NULL : (int)$_POST['external_url'],
+                                            ($_POST['external_url2'] == '') ? NULL : (int)$_POST['external_url2'],
+                                            ($_POST['external_url3'] == '') ? NULL : (int)$_POST['external_url3']);
                         }
 
                         // Introducir o actualizar formularios
@@ -609,6 +617,22 @@ function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
             "VALIDATION_TYPE"        => "text",
             "VALIDATION_EXTRA_PARAM" => "",
         ),
+        'external_url2'       => array(
+            "LABEL"                  => _tr("External URLs2"),
+            "REQUIRED"               => "no",
+            "INPUT_TYPE"             => "SELECT",
+            "INPUT_EXTRA_PARAM"      => $arrUrlsExternos,
+            "VALIDATION_TYPE"        => "text",
+            "VALIDATION_EXTRA_PARAM" => "",
+        ),
+        'external_url3'       => array(
+            "LABEL"                  => _tr("External URLs3"),
+            "REQUIRED"               => "no",
+            "INPUT_TYPE"             => "SELECT",
+            "INPUT_EXTRA_PARAM"      => $arrUrlsExternos,
+            "VALIDATION_TYPE"        => "text",
+            "VALIDATION_EXTRA_PARAM" => "",
+        ),
     );
 
     return $formCampos;
@@ -723,5 +747,6 @@ function displayCampaignCSV($pDB, $smarty, $module_name, $local_templates_dir)
 
     return $sDatosCSV;
 }
+
 
 ?>

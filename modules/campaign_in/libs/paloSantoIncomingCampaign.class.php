@@ -126,7 +126,7 @@ class paloSantoIncomingCampaign
 SELECT ce.id, ce.name, qce.queue, ce.datetime_init, ce.datetime_end,
     ce.daytime_init, ce.daytime_end, ce.script,
     COUNT(call_entry.id) AS num_completadas, NULL as promedio, ce.estatus,
-    ce.id_form, ce.id_url
+    ce.id_form, ce.id_url, ce.id_url2, ce.id_url3
 FROM (campaign_entry ce, queue_call_entry qce)
 LEFT JOIN (call_entry) ON (ce.id = call_entry.id_campaign)
 WHERE $sWhere GROUP BY ce.id ORDER BY ce.datetime_init, ce.daytime_init
@@ -239,10 +239,10 @@ SQL_CAMPANIAS;
         $sPeticionSQL =
             'INSERT INTO campaign_entry (name, id_queue_call_entry, '.
                 'id_form, datetime_init, datetime_end, daytime_init, '.
-                'daytime_end, estatus, script, id_url) '.
-            'VALUES (?, ?, ?, ?, ?, ?, ?, "A", ?, ?)';
+                'daytime_end, estatus, script, id_url, id_url2, id_url3) '.
+            'VALUES (?, ?, ?, ?, ?, ?, ?, "A", ?, ?, ?, ?)';
         $paramSQL = array($sNombre, $idQueue, $id_form, $sFechaInicial,
-            $sFechaFinal, $sHoraInicio, $sHoraFinal, $script, $id_url);
+            $sFechaFinal, $sHoraInicio, $sHoraFinal, $script, $id_url, $id_url2, $id_url3);
 
         $result = $this->_DB->genQuery($sPeticionSQL, $paramSQL);
         if (!$result) {
@@ -321,16 +321,20 @@ SQL_CAMPANIAS;
             $this->errMsg = $this->_DB->errMsg."<br/>$sPeticionSQL";
             return null;
         } else {
+            $sv = 0;
+            $v  = 1;
             $salida = array();
             foreach($tupla as $key => $value){
-                $salida[$value[0]] = $value[1];
+
+                $salida[$value[$sv]] = $value[$v];
+
             }
             return $salida;
         }
     }
 
     function updateCampaign($idCampaign, $sNombre, $sQueue, $sFechaInicial, $sFechaFinal,
-        $sHoraInicio, $sHoraFinal, $script, $id_form = NULL, $id_url = NULL)
+        $sHoraInicio, $sHoraFinal, $script, $id_form = NULL, $id_url = NULL, $id_url2 = NULL, $id_url3 = NULL)
     {
         $sNombre = trim($sNombre);
         $sQueue = trim($sQueue);
@@ -413,10 +417,11 @@ SQL_CAMPANIAS;
         $sPeticionSQL =
             'UPDATE campaign_entry SET name = ?, id_queue_call_entry = ?, '.
                 'id_form = ?, datetime_init = ?, datetime_end = ?, '.
-                'daytime_init = ?, daytime_end = ?, script = ?, id_url = ? '.
+                'daytime_init = ?, daytime_end = ?, script = ?, id_url = ?, id_url2 = ?, id_url3 = ? '.
             'WHERE id = ?';
+        var_dump($sPeticionSQL);
         $paramSQL = array($sNombre, $idQueue, $id_form, $sFechaInicial,
-            $sFechaFinal, $sHoraInicio, $sHoraFinal, $script, $id_url, $idCampaign);
+            $sFechaFinal, $sHoraInicio, $sHoraFinal, $script, $id_url, $id_url2, $id_url3, $idCampaign);
         $result = $this->_DB->genQuery($sPeticionSQL, $paramSQL);
         if (!$result) {
             $this->errMsg = $this->_DB->errMsg;
@@ -670,5 +675,99 @@ SQL_DATOS_FORM;
         return $datosCampania;
     }
 
+}
+
+function checkDataBase(){
+
+        if (is_readable("/etc/amportal.conf")) {
+            $amp_conf   = amportal_conf("/etc/amportal.conf");
+            $DBHOST     = $amp_conf['AMPDBHOST'];
+            $DBNAME     = "call_center";
+            $DBUSER     = $amp_conf['AMPDBNAME'];
+            $DBPASS     = $amp_conf['AMPDBNAME'];
+
+        $conn = new mysqli($DBHOST, $DBUSER, $DBPASS, $DBNAME);
+
+        // Verificar la conexión
+        if ($conn->connect_error) {
+            die("Error de conexión: " . $conn->connect_error);
+        }
+
+        // Consulta para verificar la existencia de las columnas id_url2 e id_url3
+        $query = "SELECT COLUMN_NAME
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_NAME = 'campaign_entry'
+          AND COLUMN_NAME IN ('id_url2', 'id_url3')";
+
+        $result = $conn->query($query);
+
+        // Verificar el resultado de la consulta
+        if ($result) {
+            $existingColumns = $result->fetch_assoc();
+
+            // Verificar si la columna id_url2 no existe
+            if (!$existingColumns) {
+
+                $rutaArchivo = '/etc/issabel.conf';
+                    if (file_exists($rutaArchivo)) {
+                        // Leer el contenido del archivo
+                        $contenido = file_get_contents($rutaArchivo);
+
+                        // Expresión regular para obtener lo que viene después del signo igual (=)
+                        $patron = '/mysqlrootpwd=(.+)/';
+
+                        // Realizar la búsqueda en el contenido del archivo
+                        preg_match($patron, $contenido, $coincidencias);
+
+                        // Obtener el resultado
+                        $AMPDBPASS = $coincidencias[1];
+                    }
+                    
+                    $conn->close();
+                    $grantCommand = "mysql -u root -p$AMPDBPASS -e \"GRANT ALTER ON \`call_center\`.* TO '$DBUSER'@'$DBHOST'; FLUSH PRIVILEGES;\"";
+                    exec($grantCommand);
+
+                    $conn = new mysqli($DBHOST, $DBUSER, $DBPASS, $DBNAME);
+
+                    $alterQuery = "ALTER TABLE `campaign_entry`
+                                   ADD COLUMN `id_url2` INT(10) UNSIGNED NULL DEFAULT NULL,
+                                   ADD COLUMN `id_url3` INT(10) UNSIGNED NULL DEFAULT NULL,
+                                   ADD INDEX `id_url2` (`id_url2`) USING BTREE,
+                                   ADD INDEX `id_url3` (`id_url3`) USING BTREE,
+                                   ADD CONSTRAINT `campaign_entry_ibfk_4` FOREIGN KEY (`id_url2`) REFERENCES `call_center`.`campaign_external_url` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
+                                   ADD CONSTRAINT `campaign_entry_ibfk_5` FOREIGN KEY (`id_url3`) REFERENCES `call_center`.`campaign_external_url` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT";
+
+                    if ($conn->query($alterQuery)) {
+                        // Comando para revocar permisos de ALTER (opcional, según tus necesidades)
+                        $revokeCommand = "mysql -u root -p$AMPDBPASS -e \"REVOKE ALTER ON \`call_center\`.* FROM '$DBUSER'@'$DBHOST'; FLUSH PRIVILEGES;\"";
+                        $revokeAlter = exec($revokeCommand);
+                    } 
+            }
+        }
+        // Cerrar la conexión a la base de datos
+        $conn->close();
+        }
+}
+
+function amportal_conf($filename) {
+
+    $file = file($filename);
+    if (is_array($file)) {
+        foreach ($file as $line) {
+            if (preg_match("/^\s*([^=]*)\s*=\s*[\"']?([\w\/\:\.\,\}\{\>\<\(\)\*\?\%!=\+\#@&\\$-]*)[\"']?\s*([;].*)?/",$line,$matches)) {
+                if(preg_match('/\$amp_conf/',$matches[1])) {
+                    $matches[1] = preg_replace('/\$amp_conf\[\'/','',$matches[1]);
+                    $matches[1] = preg_replace('/\$amp_conf\["/','',$matches[1]);
+                    $matches[1] = trim($matches[1]);
+                    $matches[1] = substr($matches[1],0,-2);
+                }
+                $matches[1] = trim($matches[1]);
+                $conf[ $matches[1] ] = trim($matches[2]);
+            }
+        }
+    } else {
+        die("<h1>".sprintf("Missing or unreadable config file (%s)...cannot continue", $filename)."</h1>");
+    }
+    return $conf;
 }
 ?>
