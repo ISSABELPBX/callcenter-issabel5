@@ -4,7 +4,7 @@
 # the repository and make your own changes, change it to yours
 # so you can install or update with this script.
 
-GITHUB_ACCOUNT='asternic'
+GITHUB_ACCOUNT='multisoluciones'
 
 yum -y install git >/dev/null
 
@@ -21,7 +21,7 @@ fi
 
 cd /usr/src
 rm -rf callcenter
-git clone https://github.com/${GITHUB_ACCOUNT}/callcenter.git callcenter 2>&1 >/dev/null
+git clone https://github.com/${GITHUB_ACCOUNT}/callcenter-issabel5.git callcenter-issabel5 2>&1 >/dev/null
 cd /usr/src/callcenter
 chown asterisk.asterisk modules/* -R
 cp -pr modules/* /var/www/html/modules
