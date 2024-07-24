@@ -110,12 +110,16 @@ function listAgent($pDB, $smarty, $module_name, $local_templates_dir)
     }
 
     $listaAgentes = $oAgentes->getAgents();
-
     // Listar todos los agentes que están conectados
     $listaOnline = $oAgentes->getOnlineAgents();
+
+
     if (is_array($listaOnline)) {
         foreach (array_keys($listaAgentes) as $k) {
-            $listaAgentes[$k]['online'] = in_array($listaAgentes[$k]['type'].'/'.$listaAgentes[$k]['number'], $listaOnline);
+            // Construir el identificador del agente tal como se espera
+            $agentIdentifier = $listaAgentes[$k]['number'];
+            // Verificar si el agente está en línea
+            $listaAgentes[$k]['online'] = in_array($agentIdentifier, $listaOnline);
         }
     } else {
         $smarty->assign("mb_title", 'Unable to read agent');
@@ -123,6 +127,7 @@ function listAgent($pDB, $smarty, $module_name, $local_templates_dir)
         foreach (array_keys($listaAgentes) as $k)
             $listaAgentes[$k]['online'] = NULL;
     }
+
 
     // Filtrar los agentes conocidos según el estado que se requiera
     function estado_Online($t)  { return ($t['online']); }
@@ -135,11 +140,12 @@ function listAgent($pDB, $smarty, $module_name, $local_templates_dir)
         'PREGUNTA_AGREGAR_AGENTE_CONF'  =>  _tr("To rapair is necesary add an agent in configuration file. Do you want to continue?"),
     ));
     foreach ($listaAgentes as $tuplaAgente) {
+        $estado = $tuplaAgente['online'] ? _tr("Online") . ' ✔️' : _tr("Offline") . ' ❌';
         $tuplaData = array(
             "<input class=\"button\" type=\"radio\" name=\"agent_number\" value=\"{$tuplaAgente["number"]}\" />",
             htmlentities($tuplaAgente['number'], ENT_COMPAT, 'UTF-8'),
             htmlentities($tuplaAgente['name'], ENT_COMPAT, 'UTF-8'),
-            ($tuplaAgente['online'] ? _tr("Online") : _tr("Offline")),
+            $estado,
             "<a href='?menu=$module_name&amp;action=edit_agent&amp;id_agent=" . $tuplaAgente["number"] . "'>["._tr("Edit")."]</a>",
         );
         $arrData[] = $tuplaData;

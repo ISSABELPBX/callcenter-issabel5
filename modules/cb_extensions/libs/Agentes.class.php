@@ -234,7 +234,7 @@ class Agentes
 
     function deleteAgent($id_agent)
     {
-        if (!ereg('^[[:digit:]]+$', $id_agent)) {
+        if (!preg_match('/^[0-9]+$/', $id_agent)) {
             $this->errMsg = '(internal) Invalid agent information';
             return FALSE;
         }
@@ -285,8 +285,11 @@ class Agentes
                     $bMembers = FALSE;
                 elseif ($bMembers) {
                 	$regs = NULL;
-                    if (preg_match('/^\s*(\S+\/\S+)/', $sLinea, $regs)) {
-                    	if (!in_array($regs[1], $listaAgentes)) $listaAgentes[] = $regs[1];
+                    if (preg_match('/\(([^\/]+)\/([^\)]+)\)/', $sLinea, $regs)) {
+                        $agentId = $regs[2]; // Captura la parte después del "/"
+                        if (!in_array($agentId, $listaAgentes)) {
+                            $listaAgentes[] = $agentId;
+                        }
                     } else if (preg_match('/^\s*\S+\s+\(\S+\s+from\s+(\S+\/\S+)\)/', $sLinea, $regs)) {
                         if (!in_array($regs[1], $listaAgentes)) $listaAgentes[] = $regs[1];
                     }
