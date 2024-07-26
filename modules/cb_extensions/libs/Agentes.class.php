@@ -300,13 +300,16 @@ class Agentes
     }
 
     function desconectarAgentes($arrAgentes)
-    {
+    {   
+
         $this->errMsg = NULL;
 
         if (!(is_array($arrAgentes) && count($arrAgentes) > 0)) {
             $this->errMsg = "Lista de agentes no válida";
             return FALSE;
         }
+
+
 
         $astman = $this->_get_AGI_AsteriskManager();
         if (is_null($astman)) {
@@ -323,16 +326,18 @@ class Agentes
         foreach ($lineas as $sLinea) {
             $regs = NULL;
             if (preg_match('/^(\w+) has \d+ calls/', $sLinea, $regs)) {
-            	$sCurQueue = $regs[1];
-            } elseif (strpos($sLinea, 'No Members') !== FALSE || strpos($sLinea, 'Members:') !== FALSE)
+                $sCurQueue = $regs[1];
+            } elseif (strpos($sLinea, 'No Members') !== FALSE || strpos($sLinea, 'Members:') !== FALSE) {
                 $bMembers = TRUE;
-            elseif (strpos($sLinea, 'No Callers') !== FALSE || strpos($sLinea, 'Callers:') !== FALSE)
+            } elseif (strpos($sLinea, 'No Callers') !== FALSE || strpos($sLinea, 'Callers:') !== FALSE) {
                 $bMembers = FALSE;
-            elseif ($bMembers) {
-	        if (preg_match('/^\s*(\S+\/\S+)/', $sLinea, $regs) || preg_match('/^\s*\S+\s+\(\S+\s+from\s+(\S+\/\S+)\)/', $sLinea, $regs)) {
-                    if (!isset($queuesByAgent[$regs[1]]))
-                        $queuesByAgent[$regs[1]] = array();
-                    $queuesByAgent[$regs[1]][] = $sCurQueue;
+            } elseif ($bMembers) {
+                if (preg_match('/\(([^\/]+)\/([^\)]+)\)/', $sLinea, $regs) || preg_match('/^\s*\S+\s+\(\S+\s+from\s+(\S+\/\S+)\)/', $sLinea, $regs)) {
+                    $agente = $regs[1] . '/' . $regs[2];
+                    if (!isset($queuesByAgent[$agente])) {
+                        $queuesByAgent[$agente] = array();
+                    }
+                    $queuesByAgent[$agente][] = $sCurQueue;
                 }
             }
         }
