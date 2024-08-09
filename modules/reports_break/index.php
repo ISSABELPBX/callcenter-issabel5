@@ -117,7 +117,8 @@ function reportReportsBreak($smarty, $module_name, $local_templates_dir, &$pDB)
 
     $arrColumnas = array(
         _tr('Agent Number'),
-        _tr('Agent Name')
+        _tr('Agent Name'),
+        _tr('Break Counts')
     );
     $bExportando = $bIssabelNuevo
         ? $oGrid->isExportAction()
@@ -136,41 +137,51 @@ function reportReportsBreak($smarty, $module_name, $local_templates_dir, &$pDB)
         $filaTotales[] = 0; // Total de segundos usado por todos los agentes en este break
     }
     $mapa['TOTAL'] = count($arrColumnas);
+    $totalBreakCounts = 0;
     $filaTotales[] = 0; // Total de segundos usado por todos los agentes en todos los breaks
     $arrColumnas[] = _tr('Total');
 
     $arrData = array();
-    foreach ($datosBreaks['reporte'] as $infoAgente) {
-        $filaAgente = array(
-            $infoAgente['numero_agente'],
-            $infoAgente['nombre_agente'],
-        );
-        $iTotalAgente = 0;  // Total de segundos usados por agente en breaks
+foreach ($datosBreaks['reporte'] as $infoAgente) {
+    $filaAgente = array(
+        $infoAgente['numero_agente'],
+        $infoAgente['nombre_agente'],
+        ''.$infoAgente['break_count']
+    );
 
-        // Valor inicial de todos los breaks es 0 segundos
-        foreach (array_keys($datosBreaks['breaks']) as $idBreak) {
-            $filaAgente[$mapa[$idBreak]] = '00:00:00';
-        }
-        
-        // Asignar duración del break para este agente y break
-        foreach ($infoAgente['breaks'] as $tuplaBreak) {
-            $sTagInicio = (!$bExportando && $tuplaBreak['duracion'] > 0) ? '<font color="green">': '';
-            $sTagFinal = ($sTagInicio != '') ? '</font>' : '';
-            $filaAgente[$mapa[$tuplaBreak['id_break']]] = $sTagInicio.formatoSegundos($tuplaBreak['duracion']).$sTagFinal;
-            $iTotalAgente += $tuplaBreak['duracion'];
-            $filaTotales[$mapa[$tuplaBreak['id_break']]] += $tuplaBreak['duracion'];
-            $filaTotales[$mapa['TOTAL']] += $tuplaBreak['duracion'];
-        }
+    // Sumar el break_count actual al total
+    $totalBreakCounts += $infoAgente['break_count'];
 
-        // Total para todos los breaks de este agente
-        $filaAgente[$mapa['TOTAL']] = formatoSegundos($iTotalAgente);
+    $iTotalAgente = 0;  // Total de segundos usados por agente en breaks
 
-        $arrData[] = $filaAgente;
+    // Valor inicial de todos los breaks es 0 segundos
+    foreach (array_keys($datosBreaks['breaks']) as $idBreak) {
+        $filaAgente[$mapa[$idBreak]] = '00:00:00';
     }
-    $sTagInicio = (!$bExportando) ? '<b>' : '';
-    $sTagFinal = ($sTagInicio != '') ? '</b>' : '';
-    foreach ($mapa as $iPos) $filaTotales[$iPos] = $sTagInicio.formatoSegundos($filaTotales[$iPos]).$sTagFinal;
-    $arrData[] = $filaTotales;
+    
+    // Asignar duración del break para este agente y break
+    foreach ($infoAgente['breaks'] as $tuplaBreak) {
+        $sTagInicio = (!$bExportando && $tuplaBreak['duracion'] > 0) ? '<font color="green">': '';
+        $sTagFinal = ($sTagInicio != '') ? '</font>' : '';
+        $filaAgente[$mapa[$tuplaBreak['id_break']]] = $sTagInicio.formatoSegundos($tuplaBreak['duracion']).$sTagFinal;
+        $iTotalAgente += $tuplaBreak['duracion'];
+        $filaTotales[$mapa[$tuplaBreak['id_break']]] += $tuplaBreak['duracion'];
+        $filaTotales[$mapa['TOTAL']] += $tuplaBreak['duracion'];
+    }
+
+    // Total para todos los breaks de este agente
+    $filaAgente[$mapa['TOTAL']] = formatoSegundos($iTotalAgente);
+
+    $arrData[] = $filaAgente;
+}
+
+// Agregar totalBreakCounts a la fila de totales
+$filaTotales[2] = $totalBreakCounts;
+
+$sTagInicio = (!$bExportando) ? '<b>' : '';
+$sTagFinal = ($sTagInicio != '') ? '</b>' : '';
+foreach ($mapa as $iPos) $filaTotales[$iPos] = $sTagInicio.formatoSegundos($filaTotales[$iPos]).$sTagFinal;
+$arrData[] = $filaTotales;
 
     if ($bIssabelNuevo) {
         $oGrid->setURL(construirURL($arrFilterExtraVars));

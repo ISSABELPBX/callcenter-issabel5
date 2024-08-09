@@ -62,17 +62,17 @@ class paloSantoReportsBreak
         }
         
         $sPeticionSQL = <<<LEER_SUMARIO_BREAK
-SELECT agent.id AS id_agente, agent.number, agent.name AS nombre_agente, audit.id_break, 
-    break.name AS nombre_break, 
-    SUM(UNIX_TIMESTAMP(IFNULL(audit.datetime_end, NOW())) - UNIX_TIMESTAMP(audit.datetime_init)) AS duracion 
-FROM agent 
-LEFT JOIN (audit, break) 
-    ON (agent.id = audit.id_agent AND break.id = audit.id_break 
-        AND audit.datetime_init >= ? AND audit.datetime_init <= ?)
-WHERE agent.estatus = "A"
-GROUP BY agent.id, audit.id_break
-LEER_SUMARIO_BREAK;
-
+                            SELECT agent.id AS id_agente, agent.number, agent.name AS nombre_agente, COUNT(agent.id) AS break_count, audit.id_break, 
+                                break.name AS nombre_break, 
+                                SUM(UNIX_TIMESTAMP(IFNULL(audit.datetime_end, NOW())) - UNIX_TIMESTAMP(audit.datetime_init)) AS duracion 
+                            FROM agent 
+                            LEFT JOIN (audit, break) 
+                                ON (agent.id = audit.id_agent AND break.id = audit.id_break 
+                                    AND audit.datetime_init >= ? AND audit.datetime_init <= ?)
+                            WHERE agent.estatus = "A"
+                            GROUP BY agent.id, audit.id_break
+                            LEER_SUMARIO_BREAK;
+        
         $recordset =& $this->_DB->fetchTable($sPeticionSQL, TRUE, array($fecha_init.' 00:00:00', $fecha_end.' 23:59:59'));
         if (!is_array($recordset)) {
             $this->errMsg = $this->_DB->errMsg;
@@ -81,18 +81,27 @@ LEER_SUMARIO_BREAK;
         $reporte = array();
         foreach ($recordset as $tupla) {
             $idAgente = $tupla['id_agente'];
-            if (!isset($reporte[$idAgente])) $reporte[$idAgente] = array(
-                'id_agente' =>  $idAgente,
-                'nombre_agente' =>  $tupla['nombre_agente'],
-                'numero_agente' =>  $tupla['number'],
-                'breaks'        =>  array(),
-            );
-            if (!is_null($tupla['id_break']))
-                $reporte[$idAgente]['breaks'][$tupla['id_break']] = array(
-                    'id_break'      =>  $tupla['id_break'],
-                    'nombre_break'  =>  $tupla['nombre_break'],
-                    'duracion'      =>  $tupla['duracion'],
+
+            if (!isset($reporte[$idAgente])) {
+                $reporte[$idAgente] = array(
+                    'id_agente' => $idAgente,
+                    'break_count' => 0, // Inicializa break_count en 0
+                    'nombre_agente' => $tupla['nombre_agente'],
+                    'numero_agente' => $tupla['number'],
+                    'breaks' => array(),
                 );
+            }
+
+            // Acumula el break_count si id_break no es null
+            if (isset($tupla['id_break']) && $tupla['id_break'] !== null) {
+                $reporte[$idAgente]['break_count'] += $tupla['break_count'];
+                
+                $reporte[$idAgente]['breaks'][$tupla['id_break']] = array(
+                    'id_break' => $tupla['id_break'],
+                    'nombre_break' => $tupla['nombre_break'],
+                    'duracion' => $tupla['duracion'],
+                );
+            }
         }
         
         $recordset =& $this->_DB->fetchTable('SELECT id, name FROM break ORDER BY id', TRUE);
