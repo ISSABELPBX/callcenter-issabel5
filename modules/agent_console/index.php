@@ -1091,6 +1091,14 @@ function manejarSesionActiva_unbreak($module_name, $smarty, $sDirLocalPlantillas
         $respuesta['message'] = _tr('Error while stopping break').' - '.$oPaloConsola->errMsg;
     }
 
+    $agent = $_SESSION['callcenter']['agente'];
+    $number = $_SESSION['callcenter']['extension'];
+
+    // Construye el comando
+    $command = "php modules/$module_name/libs/reactivateAgent.php $agent $number";
+
+    exec($command);
+
     $json = new Services_JSON();
     Header('Content-Type: application/json');
     return $json->encode($respuesta);
