@@ -461,10 +461,6 @@ function iniciarTarea($sNombreDemonio, $sNombreTarea, $infoConfig, &$oMainLog)
                     }
                 }
 
-                // Ticks alone left a signal pending for seconds after it
-                // arrived; dispatch it before checking, as the task loop does
-                pcntl_signal_dispatch();
-
                 // Revisar si existe señal que indique finalización del programa
                 // Check if there's a signal indicating program termination
                 if (!is_null($gsNombreSignal)) {

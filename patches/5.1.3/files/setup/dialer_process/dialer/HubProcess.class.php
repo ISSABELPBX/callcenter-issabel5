@@ -231,18 +231,6 @@ class HubProcess extends AbstractProcess implements iRoutedMessageHook
                         }
                     }
 
-                    /* dialerd's declare(ticks) covers only its own file, so in
-                     * this loop a signal reached manejadorPrimarioSignal() only
-                     * when dialerd's error handler happened to tick enough, and
-                     * a logrotate SIGHUP could stay pending for hours while the
-                     * task kept writing to the rotated log. Dispatch pending
-                     * signals here, right before they are acted on.
-                     * This relies on KillMode=mixed in issabeldialer.service:
-                     * under control-group systemd SIGTERMs every task at once,
-                     * and a task that obeys it exits before HubProcess's
-                     * shutdown handshake (agents never logged out). */
-                    pcntl_signal_dispatch();
-
                     // Revisar si existe señal que indique finalización del programa
                     // Check if there is a signal indicating program termination
                     if (!is_null($gsNombreSignal)) {
@@ -428,7 +416,9 @@ XML_CRASH_MSG;
         while ($this->_hub->numFinalizados() < count(array_filter($this->_tareas))) {
             foreach (array_keys($this->_tareas) as $sTarea)
                 $this->_revisarTareaActiva($sTarea, TRUE);
-            $this->_routeAndWait();
+            if ($this->_hub->procesarPaquetes())
+                $this->_hub->procesarActividad(0);
+            else $this->_hub->procesarActividad(1);
             if (time() - $iTiempoIniEspera >= 10) {
                 $sTareasPendientes = implode(', ', array_keys(array_filter($this->_tareas)));
                 $this->_log->output('WARN: tareas sin confirmar finalización en 10 s '.
@@ -460,12 +450,12 @@ XML_CRASH_MSG;
             if (!$bTodosTerminaron) {
                 $t2 = time();
                 /* Una tarea colgada dentro de wait_response() no atiende
-                 * SIGTERM (su manejador sólo corre de vuelta en el bucle de
-                 * la tarea), así que se escala a SIGKILL para que el stop
+                 * SIGTERM (su manejador sólo corre de vuelta al ámbito de
+                 * dialerd), así que se escala a SIGKILL para que el stop
                  * completo quede muy por debajo de los 30 s de systemd. A
-                 * task stuck inside wait_response() never gets back to the
-                 * task loop that runs its SIGTERM handler, so escalate to
-                 * SIGKILL to keep the whole stop well under systemd's 30 s. */
+                 * task stuck inside wait_response() never sees its SIGTERM
+                 * handler run, so escalate to SIGKILL to keep the whole stop
+                 * well under systemd's 30 s. */
                 if ($t2 - $iPrimeraSenal >= 10) {
                     $sTareasVivas = implode(', ', array_keys(array_filter($this->_tareas)));
                     $this->_log->output('WARN: tareas aún vivas 10 s tras la señal '.
@@ -481,7 +471,9 @@ XML_CRASH_MSG;
 
                 // Rutear todos los mensajes pendientes entre tareas
                 // Route all pending messages between tasks
-                $this->_routeAndWait();
+                if ($this->_hub->procesarPaquetes())
+                    $this->_hub->procesarActividad(0);
+                else $this->_hub->procesarActividad(1);
             }
         } while (!$bTodosTerminaron);
         $this->_log->output('INFO: todas las tareas han terminado. | EN: all tasks have finished.');
@@ -489,19 +481,6 @@ XML_CRASH_MSG;
         // Mandar a cerrar todas las conexiones activas
         // Send to close all active connections
         $this->_hub->finalizarServidor();
-    }
-
-    /* Route pending messages, waiting up to 1 s for activity on the task
-     * pipes. A task closes its pipe as it exits, and once every pipe is closed
-     * procesarActividad() has nothing to wait on and returns at once, so the
-     * shutdown loops above spun at full CPU and starved the exiting tasks.
-     * The 10 ms pause keeps them from spinning. */
-    private function _routeAndWait()
-    {
-        if ($this->_hub->procesarPaquetes())
-            $this->_hub->procesarActividad(0);
-        else $this->_hub->procesarActividad(1);
-        usleep(10000);
     }
 
     // Propagar la señal recibida o sintetizada

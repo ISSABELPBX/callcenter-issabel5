@@ -888,27 +888,7 @@ class AMIClientConn extends MultiplexConn
      * write command: the sync and async forms cannot drift apart. */
     private function _database_put_cmd($family, $key, $value)
     {
-        /* El valor viaja como UN argumento citado: el CLI de Asterisk parte la
-         * línea en espacios fuera de comillas (main/cli.c parse_args) y
-         * "database put" acepta exactamente tres argumentos (main/db.c), así
-         * que un valor con espacios - p.ej. un motivo de pausa que es el
-         * nombre de una pausa con espacios - daría argumentos de más y no se
-         * escribiría nada. La barra invertida se escapa junto con la comilla
-         * en una sola pasada, en ese orden, para que el propio escape no sea
-         * re-escapado; CR y LF no pueden viajar en una cabecera AMI y se
-         * sustituyen por un espacio.
-         * The value travels as ONE quoted argument: Asterisk's CLI splits the
-         * line on spaces outside quotes (main/cli.c parse_args) and
-         * "database put" takes exactly three arguments (main/db.c), so a value
-         * with spaces - e.g. a pause reason that is the name of a break with
-         * spaces - would add extra arguments and nothing would be written.
-         * The backslash is escaped together with the double quote in one
-         * pass, in that order, so the escaping itself is not re-escaped; CR
-         * and LF cannot travel in an AMI header and are replaced by a
-         * space. */
-        $v = str_replace(array("\r", "\n"), ' ', "$value");
-        $v = addcslashes($v, '\\"');
-        return "database put ".str_replace(" ","/",$family)." ".str_replace(" ","/",$key)." \"$v\"";
+        return "database put ".str_replace(" ","/",$family)." ".str_replace(" ","/",$key)." ".$value;
     }
 
     private function _database_del_cmd($family, $key)

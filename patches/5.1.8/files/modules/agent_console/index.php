@@ -168,42 +168,6 @@ function _obtenerListaAgentesTransferencia($oPaloConsola)
     return $listaAgentes;
 }
 
-/**
- * The answer to an AJAX (rawmode) request whose agent session is over.
- *
- * Every branch here answers in a shape its caller in javascript.js acts on.
- * A redirect would not do: the XHR follows it to the login page's HTML, the
- * JSON parse fails, and the page never learns the session ended.
- * - checkStatus gets the logged-out event: manejarRespuestaStatus redirects
- *   on it.
- * - ping gets ERROR_SESSION: verificar_error_session redirects on it.
- * - Any other action gets the error object its handler shows. That action
- *   did not run, so it must never be answered as a success.
- *
- * @param string $sAction The request's action
- * @return string The JSON answer
- */
-function answerEndedSession($sAction)
-{
-    $json = new Services_JSON();
-    Header('Content-Type: application/json');
-    if ($sAction == 'checkStatus') {
-        return $json->encode(array(array('event' => 'logged-out')));
-    }
-    if ($sAction == 'ping') {
-        // Computed as manejarSesionActiva_ping does: do_ping schedules itself on it.
-        $gc_maxlifetime = ini_get('session.gc_maxlifetime');
-        if ($gc_maxlifetime == "") $gc_maxlifetime = 10 * 60;
-        return $json->encode(array(
-            'statusResponse'    =>  'ERROR_SESSION',
-            'gc_maxlifetime'    =>  (int)$gc_maxlifetime,
-        ));
-    }
-    return $json->encode(array(
-        'action'    =>  'error',
-        'message'   =>  _tr('(internal) Action valid only while logged-in, agent session lost or not started')));
-}
-
 // Procedimiento para decidir qué acción tomar en el estado de login de agente
 function manejarLogin($module_name, &$smarty, $sDirLocalPlantillas)
 {
@@ -217,7 +181,18 @@ function manejarLogin($module_name, &$smarty, $sDirLocalPlantillas)
     if (in_array($sAction, array('checkStatus', 'agentLogout', 'hangup',
         'break', 'unbreak', 'transfer', 'transferagent', 'confirm_contact', 'schedule',
         'saveforms', 'updateShiftTimes'))) {
-        return answerEndedSession($sAction);
+        $json = new Services_JSON();
+        Header('Content-Type: application/json');
+        /* A checkStatus here means a page is still showing a session the
+         * server no longer has: hand it the logged-out event, which the UI
+         * already redirects on, instead of the error object that feeds
+         * do_checkstatus's ~1 ms re-poll loop. */
+        if ($sAction == 'checkStatus') {
+            return $json->encode(array(array('event' => 'logged-out')));
+        }
+        return $json->encode(array(
+            'action'    =>  'error',
+            'message'   =>  _tr('(internal) Action valid only while logged-in, agent session lost or not started')));
     }
 
     if (!in_array($sAction, array('', 'doLogin', 'checkLogin')))
@@ -616,9 +591,28 @@ function manejarSesionActiva($module_name, &$smarty, $sDirLocalPlantillas)
         $oPaloConsola->logoutAgente();
         $_SESSION['callcenter'] = generarEstadoInicial();
 
-        // An AJAX (rawmode) request cannot follow a redirect: answerEndedSession says why.
+        /* An AJAX (rawmode) request cannot follow a redirect to the login
+         * page: the XHR fetches the form's HTML, the JSON parse fails, and
+         * do_checkstatus's loop retries it every ~1 ms forever. Answer with
+         * the logged-out event, which manejarRespuestaStatus redirects on. */
         if (isset($_REQUEST['rawmode']) && $_REQUEST['rawmode'] == 'yes') {
-            $sContenido = answerEndedSession(isset($_REQUEST['action']) ? $_REQUEST['action'] : '');
+            $json = new Services_JSON();
+            Header('Content-Type: application/json');
+            if (isset($_REQUEST['action']) && $_REQUEST['action'] == 'ping') {
+                // do_ping passes every answer through verificar_error_session,
+                // which redirects on ERROR_SESSION. The long-poll mode starts
+                // no ping loop today (the SSE block in javascript.js is
+                // commented out); this keeps that mode safe if it returns.
+                $gc_maxlifetime = ini_get('session.gc_maxlifetime');
+                if ($gc_maxlifetime == "") $gc_maxlifetime = 10 * 60;
+                $gc_maxlifetime = (int)$gc_maxlifetime;
+                $sContenido = $json->encode(array(
+                    'statusResponse'    =>  'ERROR_SESSION',
+                    'gc_maxlifetime'    =>  $gc_maxlifetime,
+                ));
+            } else {
+                $sContenido = $json->encode(array(array('event' => 'logged-out')));
+            }
         } else {
             // Para agente no logoneado, se redirecciona a la página de login
             Header('Location: ?menu='.$module_name);
