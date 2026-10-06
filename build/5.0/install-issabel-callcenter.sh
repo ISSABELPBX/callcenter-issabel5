@@ -434,7 +434,16 @@ mkdir -p /tmp/new_module/callcenter
 /bin/cp -rf /usr/share/issabel/module_installer/callcenter/* /tmp/new_module/callcenter/
 chown -R asterisk.asterisk /tmp/new_module/callcenter
 
-php /tmp/new_module/callcenter/setup/installer.php
+# The database installer's exit code must decide the install: a failed step
+# here leaves a half-built installation, which must be loud, not reported as
+# success. There is no rollback; re-running after fixing the reported problem
+# completes it.
+if ! php /tmp/new_module/callcenter/setup/installer.php; then
+    rm -rf /tmp/new_module
+    echo -e "${RED}Error: the database installer failed - see the ERR lines above.${NC}"
+    echo -e "${RED}Installation aborted; the module is not completely installed.${NC}"
+    exit 1
+fi
 rm -rf /tmp/new_module
 
 # Set shell for user asterisk (required for dialer to work)

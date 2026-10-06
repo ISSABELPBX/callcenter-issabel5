@@ -7,6 +7,32 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.1.13
+
+- Bug fix: the dialer logs out an agent whose extension stops answering qualify (PeerStatus Unreachable), not only when it unregisters — a PJSIP agent too, whose endpoint never reports Unregistered; a call in progress is hung up, as on an unregister
+
+## 5.1.12
+
+- Bug fix: the remover no longer puts the MySQL root password on the mysql command line, where ps showed it while the database drop ran
+- Bug fix: a fresh install no longer puts the MySQL root password on the mysql command line while creating the database
+- Bug fix: the installer aborts when the database installer fails, instead of printing "installation complete!" over a half-built installation
+- Bug fix: the database installer's exit code reflects every step, and a successful run without a staged module no longer reports failure
+- Bug fix: a database that cannot be created or loaded stops the schema steps, leaving one error that names the cause instead of dozens
+- Bug fix: dialerd is executable in git, so a clone cannot ship a dialer that will not start; this version's update restores the bit on a box that lost it
+
+## 5.1.11
+
+- Bug fix: campaign pages no longer change the database schema on page load, and no longer put the MySQL root password on the mysql command line; the installer and this version's update now create the second and third external-URL columns
+- Bug fix: a new incoming campaign keeps its second and third external URLs, which creating it silently dropped
+- Bug fix: saving an incoming campaign no longer prints its SQL statement into the page
+- Bug fix: incoming and outgoing campaign forms reject a malformed external-URL id instead of casting it to a number
+
+## 5.1.10
+
+- Bug fix: campaign monitoring's directly-served libs/api.php — reachable without a session and shell-injectable through the queue parameter — is retired; it now answers HTTP 410 and its data comes from an authenticated module action
+- New feature: getAgentLastCalls action and PaloSantoConsola::leerUltimasLlamadasAgentes() serve each agent's last call with one fixed SQL per campaign type, bound by ID only, on the module's own DSN
+- Improve: "Phone Off" comes from the dialer's per-agent queue_status over ECCP (now documented in the protocol spec), labelled with _tr() and coloured by number gated on the agent's raw status, instead of parsing `asterisk -rx 'queue show'` once at page load
+
 ## 5.1.9
 
 - Bug fix: a console action sent in the instant after the agent session ends is answered as a failure the console shows, instead of a success message or silence

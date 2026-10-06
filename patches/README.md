@@ -43,6 +43,14 @@ One exception: 5.1.2 starts from the 5.1.1 RC release (`47a702b`), not from
 the 5.1.1 bump (`54ec605`) — work went on under 5.1.1 after the bump, and the
 RC is what 5.1.1 boxes run. So its range is `9836bb6^ 418b3aa`.
 
+- A **schema change** ships as SQL inside `update.sh` — idempotent, with the
+  root password only in `MYSQL_PWD` — and never as a copied file:
+  `setup/call_center.sql` and `setup/installer.php` are changed in the repo
+  for fresh installs but are **not** put under `files/`. That is safe because
+  the updater never runs either file, and a full install re-copies `setup/`
+  from the checkout before `installer.php` runs, so the copy an updated box
+  carries is never the one that executes.
+
 ## update.sh — the database and configuration changes
 
 Mandatory in every version directory, even when there is nothing to do: then
