@@ -27,26 +27,68 @@ require_once("$DocumentRoot/libs/paloSantoDB.class.php");
 
 $tmpDir = '/tmp/new_module/callcenter';  # in this folder the load module extract the package content
 #generar el archivo db de campañas // EN: Generate campaign db file
-$return=1;
+# A run with no staged SQL (the config-only mode the update.sh scripts use)
+# is a success: only the block below can fail it.
+$return = 0;
+$installFailed = false;
 $path_script_db="$tmpDir/setup/call_center.sql";
-$datos_conexion['user']     = "asterisk";
-$datos_conexion['password'] = "asterisk";
-$datos_conexion['locate']   = "";
-$oInstaller = new Installer();
+
+# The database is ready (it exists and its schema loaded): only then do the
+# schema steps below run. A failed root connection, CREATE or import leaves
+# it false and skips them, so the run ends with the one ERR that names the
+# cause instead of dozens burying it. The config part further down (dialplan
+# contexts, parking lot, agents.conf) runs either way; the exit is 1.
+$bBaseLista = false;
 
 if (file_exists($path_script_db))
 {
-    //STEP 1: Create database call_center
-    $return=0;
-    $return=$oInstaller->createNewDatabaseMySQL($path_script_db,"call_center",$datos_conexion);
-
-    // STEP 1.1: Ensure asterisk user has permissions on call_center database
+    //STEP 1: Create database call_center and load its schema. Done here
+    //rather than through a stock library helper so that the root password
+    //travels in the MYSQL_PWD environment only - never on the mysql command
+    //line, where the process list would show it - and so that every
+    //statement is checked: a failed step must fail the install, not print.
     $pDBRoot = new paloDB('mysql://root:'.MYSQL_ROOT_PASSWORD.'@localhost/mysql');
-    $pDBRoot->genQuery("GRANT ALL ON call_center.* TO asterisk@localhost IDENTIFIED BY 'asterisk'");
-    $pDBRoot->genQuery("FLUSH PRIVILEGES");
-    $pDBRoot->disconnect();
-    fputs(STDERR, "INFO: Granted permissions to asterisk@localhost on call_center database | Es: Permisos concedidos a asterisk@localhost en base de datos call_center\n");
+    if ($pDBRoot->errMsg != '') {
+        ccStepFail("could not open the root MySQL connection - ".$pDBRoot->errMsg." | Es: no se pudo abrir la conexión root de MySQL");
+    } elseif (!$pDBRoot->genQuery("CREATE DATABASE IF NOT EXISTS call_center")) {
+        ccStepFail("could not create the call_center database - ".$pDBRoot->errMsg." | Es: no se pudo crear la base de datos call_center");
+    } else {
+        fputs(STDERR, "INFO: call_center database present | Es: base de datos call_center presente\n");
 
+        // STEP 1.1: Ensure asterisk user has permissions on call_center database
+        $bGrantOk = $pDBRoot->genQuery("GRANT ALL ON call_center.* TO asterisk@localhost IDENTIFIED BY 'asterisk'");
+        $bFlushOk = $pDBRoot->genQuery("FLUSH PRIVILEGES");
+        if (!$bGrantOk) {
+            ccStepFail("could not grant on call_center to asterisk@localhost - ".$pDBRoot->errMsg." | Es: no se pudo conceder permisos sobre call_center a asterisk@localhost");
+        }
+        if (!$bFlushOk) {
+            ccStepFail("FLUSH PRIVILEGES failed - ".$pDBRoot->errMsg." | Es: falló FLUSH PRIVILEGES");
+        }
+        if ($bGrantOk && $bFlushOk) {
+            fputs(STDERR, "INFO: Granted permissions to asterisk@localhost on call_center database | Es: Permisos concedidos a asterisk@localhost en base de datos call_center\n");
+        }
+
+        // Load the schema. The client reads MYSQL_PWD, so the command line -
+        // and with it the process list and this command's own output -
+        // carries no password. call_center.sql is all CREATE TABLE IF NOT
+        // EXISTS, so this is safe to re-run over a database that was kept
+        // through a removal.
+        $salidaImport = array();
+        putenv('MYSQL_PWD='.MYSQL_ROOT_PASSWORD);
+        exec('mysql -u root call_center < '.escapeshellarg($path_script_db).' 2>&1', $salidaImport, $rv);
+        putenv('MYSQL_PWD');
+        if ($rv != 0) {
+            ccStepFail("loading call_center.sql failed (mysql exit $rv): ".implode(' | ', array_slice($salidaImport, 0, 3))." | Es: falló la carga de call_center.sql (mysql exit $rv)");
+        } else {
+            fputs(STDERR, "INFO: call_center.sql loaded into call_center | Es: call_center.sql cargado en call_center\n");
+            $bBaseLista = true;
+        }
+        $return = $rv;
+    }
+    $pDBRoot->disconnect();
+}
+
+if ($bBaseLista) {
     $pDB = new paloDB ('mysql://root:'.MYSQL_ROOT_PASSWORD.'@localhost/call_center');
     quitarColumnaSiExiste($pDB, 'call_center', 'agent', 'queue');
     crearColumnaSiNoExiste($pDB, 'call_center', 'calls',
@@ -79,6 +121,18 @@ if (file_exists($path_script_db))
     crearColumnaSiNoExiste($pDB, 'call_center', 'campaign_entry',
         'id_url',
         "ADD COLUMN id_url int unsigned, ADD FOREIGN KEY (id_url) REFERENCES campaign_external_url (id)");
+    crearColumnaSiNoExiste($pDB, 'call_center', 'campaign',
+        'id_url2',
+        "ADD COLUMN id_url2 int unsigned, ADD INDEX id_url2 (id_url2), ADD CONSTRAINT campaign_ibfk_2 FOREIGN KEY (id_url2) REFERENCES campaign_external_url (id)");
+    crearColumnaSiNoExiste($pDB, 'call_center', 'campaign',
+        'id_url3',
+        "ADD COLUMN id_url3 int unsigned, ADD INDEX id_url3 (id_url3), ADD CONSTRAINT campaign_ibfk_3 FOREIGN KEY (id_url3) REFERENCES campaign_external_url (id)");
+    crearColumnaSiNoExiste($pDB, 'call_center', 'campaign_entry',
+        'id_url2',
+        "ADD COLUMN id_url2 int unsigned, ADD INDEX id_url2 (id_url2), ADD CONSTRAINT campaign_entry_ibfk_4 FOREIGN KEY (id_url2) REFERENCES campaign_external_url (id)");
+    crearColumnaSiNoExiste($pDB, 'call_center', 'campaign_entry',
+        'id_url3',
+        "ADD COLUMN id_url3 int unsigned, ADD INDEX id_url3 (id_url3), ADD CONSTRAINT campaign_entry_ibfk_5 FOREIGN KEY (id_url3) REFERENCES campaign_external_url (id)");
     crearColumnaSiNoExiste($pDB, 'call_center', 'calls',
         'trunk',
         "ADD COLUMN trunk varchar(50)");
@@ -86,7 +140,9 @@ if (file_exists($path_script_db))
         'type',
         "ADD COLUMN type enum('Agent','SIP','PJSIP','IAX2') DEFAULT 'Agent' NOT NULL AFTER id");
     // Ensure PJSIP is in the enum for existing installations
-    $pDB->genQuery("ALTER TABLE agent MODIFY type enum('Agent','SIP','PJSIP','IAX2') DEFAULT 'Agent' NOT NULL");
+    if (!$pDB->genQuery("ALTER TABLE agent MODIFY type enum('Agent','SIP','PJSIP','IAX2') DEFAULT 'Agent' NOT NULL")) {
+        ccStepFail("could not widen the agent type enum - ".$pDB->errMsg." | Es: no se pudo ampliar el enum type de agent");
+    }
     crearColumnaSiNoExiste($pDB, 'call_center', 'calls',
         'scheduled',
         "ALTER TABLE calls ADD COLUMN scheduled BOOLEAN NOT NULL DEFAULT 0");
@@ -129,17 +185,20 @@ if (file_exists($path_script_db))
     actualizarLongitudCampo($pDB, 'call_center', 'current_calls', 'ChannelClient', 50);
 
     /* Fijar el charset por omision de la base de datos misma. El CREATE
-     * DATABASE de paloSantoInstaller::createNewDatabaseMySQL() no lleva
-     * charset, asi que la base hereda el del servidor (latin1 en una
-     * instalacion tipica) aunque todas sus tablas sean utf8mb4. Cualquier
-     * CREATE TABLE futuro sin charset explicito heredaria latin1. */
-    /* Set the default charset of the database itself. The CREATE DATABASE in
-     * paloSantoInstaller::createNewDatabaseMySQL() carries no charset, so the
-     * database inherits the server default (latin1 on a typical install) even
-     * though all of its tables are utf8mb4. Any future CREATE TABLE without an
-     * explicit charset would inherit latin1. */
-    $pDB->genQuery('ALTER DATABASE call_center CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci');
-    fputs(STDERR, "INFO: call_center database default charset set to utf8mb4 | Es: charset por omision de la base call_center fijado a utf8mb4\n");
+     * DATABASE de arriba no lleva charset, asi que la base hereda el del
+     * servidor (latin1 en una instalacion tipica) aunque todas sus tablas
+     * sean utf8mb4. Cualquier CREATE TABLE futuro sin charset explicito
+     * heredaria latin1. */
+    /* Set the default charset of the database itself. The CREATE DATABASE
+     * above carries no charset, so the database inherits the server default
+     * (latin1 on a typical install) even though all of its tables are
+     * utf8mb4. Any future CREATE TABLE without an explicit charset would
+     * inherit latin1. */
+    if (!$pDB->genQuery('ALTER DATABASE call_center CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci')) {
+        ccStepFail("could not set the call_center default charset - ".$pDB->errMsg." | Es: no se pudo fijar el charset por omisión de call_center");
+    } else {
+        fputs(STDERR, "INFO: call_center database default charset set to utf8mb4 | Es: charset por omision de la base call_center fijado a utf8mb4\n");
+    }
 
     // Convertir todas las tablas a utf8mb4 para soporte completo de Unicode
     // EN: Convert all tables to utf8mb4 for full Unicode support
@@ -147,7 +206,9 @@ if (file_exists($path_script_db))
 
     // Asegurarse de que todo agente tiene una contraseña de ECCP
     // EN: Ensure that every agent has an ECCP password
-    $pDB->genQuery('UPDATE agent SET eccp_password = SHA1(CONCAT(NOW(), RAND(), number)) WHERE eccp_password IS NULL');
+    if (!$pDB->genQuery('UPDATE agent SET eccp_password = SHA1(CONCAT(NOW(), RAND(), number)) WHERE eccp_password IS NULL')) {
+        ccStepFail("could not backfill the agents' ECCP passwords - ".$pDB->errMsg." | Es: no se pudieron rellenar las contraseñas ECCP de los agentes");
+    }
 
     $pDB->disconnect();
 }
@@ -173,7 +234,21 @@ if ($astMajor >= 12) {
     convertirAgentsConf($astMajor);
 }
 
-exit($return);
+// The exit code carries the whole run: the schema import's own result and
+// the failure flag every step helper sets. A run where nothing failed exits
+// 0, including the config-only run with no staged SQL.
+exit(($return !== 0 || $installFailed) ? 1 : 0);
+
+/* Record a failed installation step: print the bilingual ERR line in this
+ * file's format and remember the failure for the exit code. The message must
+ * never carry a credential - the root password is not on any command line
+ * this file builds, so command output is safe to quote. */
+function ccStepFail($msg)
+{
+    global $installFailed;
+    $installFailed = true;
+    fputs(STDERR, "ERR: $msg\n");
+}
 
 function quitarColumnaSiExiste($pDB, $sDatabase, $sTabla, $sColumna)
 {
@@ -184,7 +259,7 @@ WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?
 EXISTE_COLUMNA;
     $r = $pDB->getFirstRowQuery($sPeticionSQL, FALSE, array($sDatabase, $sTabla, $sColumna));
     if (!is_array($r)) {
-        fputs(STDERR, "ERR: al verificar tabla $sTabla.$sColumna - ".$pDB->errMsg." | EN: ERR: al verificar tabla $sTabla.$sColumna\n");
+        ccStepFail("al verificar tabla $sTabla.$sColumna - ".$pDB->errMsg." | EN: ERR: al verificar tabla $sTabla.$sColumna");
         return;
     }
     if ($r[0] > 0) {
@@ -192,7 +267,7 @@ EXISTE_COLUMNA;
         $sql = "ALTER TABLE $sTabla DROP COLUMN $sColumna";
         fputs(STDERR, "\t$sql\n");
         $r = $pDB->genQuery($sql);
-        if (!$r) fputs(STDERR, "ERR: ".$pDB->errMsg."\n");
+        if (!$r) ccStepFail($pDB->errMsg);
     } else {
         fputs(STDERR, "INFO: No existe $sTabla.$sColumna en base de datos $sDatabase. No se hace nada. | EN: INFO: $sTabla.$sColumna does not exist in database $sDatabase. Nothing done.\n");
     }
@@ -207,7 +282,7 @@ WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?
 EXISTE_COLUMNA;
     $r = $pDB->getFirstRowQuery($sPeticionSQL, FALSE, array($sDatabase, $sTabla, $sColumna));
     if (!is_array($r)) {
-        fputs(STDERR, "ERR: al verificar tabla $sTabla.$sColumna - ".$pDB->errMsg." | EN: ERR: al verificar tabla $sTabla.$sColumna\n");
+        ccStepFail("al verificar tabla $sTabla.$sColumna - ".$pDB->errMsg." | EN: ERR: al verificar tabla $sTabla.$sColumna");
         return;
     }
     if ($r[0] <= 0) {
@@ -215,7 +290,7 @@ EXISTE_COLUMNA;
         $sql = "ALTER TABLE $sTabla $sColumnaDef";
         fputs(STDERR, "\t$sql\n");
         $r = $pDB->genQuery($sql);
-        if (!$r) fputs(STDERR, "ERR: ".$pDB->errMsg."\n");
+        if (!$r) ccStepFail($pDB->errMsg);
     } else {
         fputs(STDERR, "INFO: Ya existe $sTabla.$sColumna en base de datos $sDatabase. | EN: INFO: $sTabla.$sColumna already exists in database $sDatabase.\n");
     }
@@ -230,7 +305,7 @@ WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ?
 EXISTE_INDICE;
     $r = $pDB->getFirstRowQuery($sPeticionSQL, FALSE, array($sDatabase, $sTabla, $sIndice));
     if (!is_array($r)) {
-        fputs(STDERR, "ERR: al verificar tabla $sTabla.$sIndice - ".$pDB->errMsg." | EN: ERR: al verificar índice $sTabla.$sIndice\n");
+        ccStepFail("al verificar tabla $sTabla.$sIndice - ".$pDB->errMsg." | EN: ERR: al verificar índice $sTabla.$sIndice");
         return;
     }
     if ($r[0] <= 0) {
@@ -238,7 +313,7 @@ EXISTE_INDICE;
         $sql = "ALTER TABLE $sTabla $sIndiceDef";
         fputs(STDERR, "\t$sql\n");
         $r = $pDB->genQuery($sql);
-        if (!$r) fputs(STDERR, "ERR: ".$pDB->errMsg."\n");
+        if (!$r) ccStepFail($pDB->errMsg);
     } else {
         fputs(STDERR, "INFO: Ya existe $sTabla.$sIndice en base de datos $sDatabase. | EN: INFO: $sTabla.$sIndice already exists in database $sDatabase.\n");
     }
@@ -255,7 +330,7 @@ WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?
 VERIFICAR_LONGITUD;
     $r = $pDB->getFirstRowQuery($sPeticionSQL, FALSE, array($sDatabase, $sTabla, $sColumna));
     if (!is_array($r)) {
-        fputs(STDERR, "ERR: al verificar longitud de $sTabla.$sColumna - ".$pDB->errMsg." | EN: ERR: al verificar longitud de $sTabla.$sColumna\n");
+        ccStepFail("al verificar longitud de $sTabla.$sColumna - ".$pDB->errMsg." | EN: ERR: al verificar longitud de $sTabla.$sColumna");
         return;
     }
     if (isset($r[0]) && $r[0] < $iNuevaLongitud) {
@@ -274,7 +349,7 @@ VERIFICAR_LONGITUD;
         fputs(STDERR, "INFO: Actualizando longitud de $sTabla.$sColumna a $iNuevaLongitud caracteres | EN: INFO: Updating length of $sTabla.$sColumna to $iNuevaLongitud characters\n");
         fputs(STDERR, "\t$sql\n");
         $r = $pDB->genQuery($sql);
-        if (!$r) fputs(STDERR, "ERR: ".$pDB->errMsg."\n");
+        if (!$r) ccStepFail($pDB->errMsg);
     } else {
         fputs(STDERR, "INFO: La longitud de $sTabla.$sColumna ya es adecuada o no existe. | EN: INFO: The length of $sTabla.$sColumna is already adequate or does not exist.\n");
     }
@@ -293,6 +368,12 @@ function instalarContextosEspeciales($astMajor = 18)
     $sInicioContenido = "; BEGIN ISSABEL CALL-CENTER CONTEXTS DO NOT REMOVE THIS LINE\n";
     $sFinalContenido =  "; END ISSABEL CALL-CENTER CONTEXTS DO NOT REMOVE THIS LINE\n";
 
+    // Replaces the explanatory comments that stripDialplanComments() removes,
+    // so the box still says where the contexts are documented.
+    $sReferenciaContenido =
+        "; Generated by the Call Center installer - changes here are lost on reinstall.\n".
+        "; The contexts are documented in setup/installer.php in the module source.\n";
+
     // Cargar el archivo, notando el inicio y el final del área de contextos de callcenter
     // EN: Load the file, noting the start and end of the callcenter contexts area
     $bEncontradoInicio = $bEncontradoFinal = FALSE;
@@ -309,9 +390,10 @@ function instalarContextosEspeciales($astMajor = 18)
     	}
     }
     if ($bEncontradoInicio xor $bEncontradoFinal) {
-    	fputs(STDERR, "ERR: no se puede localizar correctamente segmento de contextos de Call Center | EN: ERR: cannot correctly locate Call Center contexts segment\n");
+    	ccStepFail("no se puede localizar correctamente segmento de contextos de Call Center | EN: ERR: cannot correctly locate Call Center contexts segment");
     } else {
     	$contenido[] = $sInicioContenido;
+    	$contenido[] = $sReferenciaContenido;
 
         // [llamada_agendada] - Scheduled callback context (works on all versions)
         $sContextos = '
@@ -516,11 +598,43 @@ exten => _X.,1,NoOp(Issabel CallCenter: Callback attended transfer routing for $
 ';
         }
 
-        $contenido[] = $sContextos;
+        $contenido[] = stripDialplanComments($sContextos);
         $contenido[] = $sFinalContenido;
-        file_put_contents($sArchivo, $contenido);
-        chown($sArchivo, 'asterisk'); chgrp($sArchivo, 'asterisk');
+        if (file_put_contents($sArchivo, $contenido) === false) {
+            ccStepFail("no se pudo escribir $sArchivo (contextos de Call Center) | EN: ERR: could not write $sArchivo (Call Center contexts)");
+        }
+        if (!chown($sArchivo, 'asterisk') || !chgrp($sArchivo, 'asterisk')) {
+            ccStepFail("no se pudo fijar el dueño de $sArchivo (contextos de Call Center) | EN: ERR: could not set the owner of $sArchivo (Call Center contexts)");
+        }
     }
+}
+
+/**
+ * Remove the explanatory comments from a dialplan block before it is written to
+ * /etc/asterisk.
+ *
+ * The comments in $sContextos document why each context is shaped the way it is:
+ * the async goto race behind [atxfer-rebridge], why a consult leg dials the
+ * device directly instead of going through from-internal, and so on. They are
+ * worth keeping for future work, so they stay here in the installer - the single
+ * source of truth for that dialplan - and are simply not copied onto the box,
+ * where they only make extensions_custom.conf long to read.
+ *
+ * Only whole-line comments are dropped. A trailing comment on a dialplan line is
+ * left alone: it is short, and removing it would mean parsing the line. Runs of
+ * blank lines are collapsed to one so the contexts stay visually separated.
+ */
+function stripDialplanComments($sBloque)
+{
+    $arrLineas = array();
+    foreach (explode("\n", $sBloque) as $sLinea) {
+        if (preg_match('/^\s*;/', $sLinea)) continue;
+        if (trim($sLinea) === '' && (count($arrLineas) == 0 || trim(end($arrLineas)) === ''))
+            continue;
+        $arrLineas[] = $sLinea;
+    }
+    while (count($arrLineas) > 0 && trim(end($arrLineas)) === '') array_pop($arrLineas);
+    return implode("\n", $arrLineas)."\n";
 }
 
 /**
@@ -565,7 +679,7 @@ function instalarLoteParqueoCallCenter()
         }
     }
     if ($bEncontradoInicio xor $bEncontradoFinal) {
-        fputs(STDERR, "ERR: no se puede localizar correctamente segmento de lote de parqueo de Call Center | EN: ERR: cannot correctly locate Call Center parking lot segment\n");
+        ccStepFail("no se puede localizar correctamente segmento de lote de parqueo de Call Center | EN: ERR: cannot correctly locate Call Center parking lot segment");
         return;
     }
 
@@ -609,8 +723,13 @@ PARKINGLOT;
     $contenido[] = $sInicioContenido;
     $contenido[] = $sLote."\n";
     $contenido[] = $sFinalContenido;
-    file_put_contents($sArchivo, $contenido);
-    chown($sArchivo, 'asterisk'); chgrp($sArchivo, 'asterisk');
+    if (file_put_contents($sArchivo, $contenido) === false) {
+        ccStepFail("no se pudo escribir $sArchivo (lote de parqueo callcenter_hold) | EN: ERR: could not write $sArchivo (callcenter_hold parking lot)");
+        return;
+    }
+    if (!chown($sArchivo, 'asterisk') || !chgrp($sArchivo, 'asterisk')) {
+        ccStepFail("no se pudo fijar el dueño de $sArchivo (lote de parqueo callcenter_hold) | EN: ERR: could not set the owner of $sArchivo (callcenter_hold parking lot)");
+    }
     fputs(STDERR, "INFO: lote de parqueo callcenter_hold instalado en $sArchivo | EN: INFO: callcenter_hold parking lot installed in $sArchivo\n");
 }
 
@@ -637,14 +756,19 @@ function instalarAgentDefaultsTemplate()
         }
         // EN: Append template at the end
         // Agregar plantilla al final
-        file_put_contents($sArchivo, $contenido . $sTemplate);
+        $bEscrito = file_put_contents($sArchivo, $contenido . $sTemplate);
     } else {
         // EN: Create new file with template
         // Crear nuevo archivo con plantilla
-        file_put_contents($sArchivo, $sTemplate);
+        $bEscrito = file_put_contents($sArchivo, $sTemplate);
     }
-    chown($sArchivo, 'asterisk');
-    chgrp($sArchivo, 'asterisk');
+    if ($bEscrito === false) {
+        ccStepFail("no se pudo escribir $sArchivo (plantilla [agent-defaults]) | EN: ERR: could not write $sArchivo ([agent-defaults] template)");
+        return;
+    }
+    if (!chown($sArchivo, 'asterisk') || !chgrp($sArchivo, 'asterisk')) {
+        ccStepFail("no se pudo fijar el dueño de $sArchivo (plantilla [agent-defaults]) | EN: ERR: could not set the owner of $sArchivo ([agent-defaults] template)");
+    }
     fputs(STDERR, "INFO: Created [agent-defaults] template in agents.conf | Es: INFO: Plantilla [agent-defaults] creada en agents.conf\n");
 }
 
@@ -784,13 +908,14 @@ function convertirAgentsConf($astMajor)
 
     $hArchivo = fopen($sArchivo, 'w');
     if (!$hArchivo) {
-        fputs(STDERR, "ERR: Cannot write agents.conf\n");
+        ccStepFail("no se pudo abrir agents.conf para escribir | EN: ERR: cannot write agents.conf");
         return;
     }
     foreach ($contenidoNuevo as $sLinea) fwrite($hArchivo, $sLinea);
     fclose($hArchivo);
-    chown($sArchivo, 'asterisk');
-    chgrp($sArchivo, 'asterisk');
+    if (!chown($sArchivo, 'asterisk') || !chgrp($sArchivo, 'asterisk')) {
+        ccStepFail("no se pudo fijar el dueño de agents.conf (conversión) | EN: ERR: could not set the owner of agents.conf (conversion)");
+    }
     fputs(STDERR, "INFO: agents.conf conversion complete (".count($agentesEncontrados)." agents)\n");
 }
 
@@ -814,7 +939,7 @@ SQL_CHARSET;
         fputs(STDERR, "INFO: Converting $sTabla to utf8mb4 charset | Es: Convirtiendo $sTabla a charset utf8mb4\n");
         fputs(STDERR, "\t$sql\n");
         $r = $pDB->genQuery($sql);
-        if (!$r) fputs(STDERR, "ERR: ".$pDB->errMsg."\n");
+        if (!$r) ccStepFail($pDB->errMsg);
     }
     fputs(STDERR, "INFO: utf8mb4 charset conversion complete (".count($result)." tables converted) | Es: Conversión de charset utf8mb4 completada (".count($result)." tablas convertidas)\n");
 }

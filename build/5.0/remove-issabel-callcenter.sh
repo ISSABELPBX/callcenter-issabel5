@@ -109,7 +109,9 @@ read -p "Do you want to delete the call_center database? (y/n): " DELETE_DB
 if [ "$DELETE_DB" = "y" ] || [ "$DELETE_DB" = "Y" ]; then
     MYSQL_ROOT_PWD=$(grep '^mysqlrootpwd=' /etc/issabel.conf | cut -d'=' -f2)
     if [ -n "$MYSQL_ROOT_PWD" ]; then
-        mysql -u root -p"$MYSQL_ROOT_PWD" -e "DROP DATABASE IF EXISTS call_center;" 2>/dev/null
+        # MYSQL_PWD, never -p<password>: the password must not appear in the
+        # process list (ps) while the drop runs.
+        MYSQL_PWD="$MYSQL_ROOT_PWD" mysql -u root -e "DROP DATABASE IF EXISTS call_center;" 2>/dev/null
         if [ $? -eq 0 ]; then
             echo "Database call_center deleted successfully."
         else
@@ -119,6 +121,7 @@ if [ "$DELETE_DB" = "y" ] || [ "$DELETE_DB" = "Y" ]; then
         echo "Could not read MySQL root password"
         echo "You can delete the database manually by dropping call_center database"
     fi
+    unset MYSQL_ROOT_PWD
 else
     echo "Database call_center was not deleted."
 fi

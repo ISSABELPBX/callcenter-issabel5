@@ -41,6 +41,27 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Description**: `[atxfer-hold]` is a bare `MusicOnHold(,1800)` with no check that the agent who put the caller there still exists, so any path that ever leaves a caller in it means up to 30 minutes of music with nobody on the other end. Change #70 removed the one known such path (the `Bridge()` thread race) and added a `SoftHangup` backstop inside `[atxfer-rebridge]`, but the context itself is still a dead end: the residual exposure is a caller orphaned during the ~2 s reconnect window, or by any future path. The `1800` is also now out of step with the 900 s hold cap the `callcenter_hold` parking lot got in Change #69. Proposed fix: have the dialer `SetVar` the agent's channel name onto the client channel at both `Redirect` sites in `ECCPConn::Request_agentauth_atxfercall()`, then run the hold as chunked `MusicOnHold` slices that bail out via `CHANNEL_EXISTS()` once that channel is gone. `res_musiconhold` restores the saved position for `mode=files` classes, so chunking does not restart the music. Deferred from Change #70 to keep that fix to a single file.
 * **Status**: Untouched
 
+### Campaign Finish Check Disagrees With the Dial Query
+
+* **Type**: Bug
+* **Urgency**: Medium
+* **Date Added**: 2026-09-22
+* **Location**: `CampaignProcess.class.php:1194-1220`, `CampaignProcess.class.php:2061-2087`
+* **Description**: `_checkCampaignDataExhausted()` decides a campaign is exhausted by counting rows matching `(status IS NULL OR status NOT IN ("Success","Placing","Ringing","OnQueue","OnHold")) AND retries < campaign.retries AND dnc = 0`. The dial query that actually places the calls adds two restrictions the count does not: `agent IS NULL`, and either all four of `date_init`/`date_end`/`time_init`/`time_end` NULL (branch 2) or a full current-window match (branch 1). Any row that is counted but not dialable blocks the campaign from ever reaching `T`: it is never selected for dialing, so its `retries` never increments, so it stays below the limit permanently and the campaign stays `Active` forever. Two shapes trigger it -- a row with a partially-set window (e.g. `date_init` set but `time_init` NULL, matching neither branch), and a row with a non-NULL `agent` that `_actualizarLlamadasAgendables()` never picks up. Verified latent on the client box on 2026-09-22 (0 such rows across all 8 campaigns), so this is a trap waiting on the first partial-window or orphaned-agent row, not an active fault.
+* **Recommendation**: Have the two sites share one predicate instead of restating it, so the finish check can never count a row the dialer will not dial.
+* **Status**: Untouched
+
+### Campaign List Needs a 'Retries Left' Column
+
+* **Type**: Feature
+* **Urgency**: Medium
+* **Date Added**: 2026-09-22
+* **Location**: `paloSantoCampaignCC.class.php:88-90`, `campaign_out/index.php:195`, `campaign_out/index.php:211-213`, `campaign_out/lang/*.lang`
+* **Description**: The campaign list's `Pending Calls` column counts only never-originated rows (`status IS NULL`, `paloSantoCampaignCC.class.php:90`), but the dialer will not mark a campaign `Finish` until every non-`Success` row has also used up its retries (`_checkCampaignDataExhausted()`). The visible column is therefore not the one that governs the status, and a campaign reading `Pending Calls = 0` sits at `Active` with no on-screen explanation. Seen on the client box on 2026-09-22: campaigns 6, 7 and 8 (`ADSL - Q3'26 - VF/ET/OR`) each showed `Pending Calls = 0` at status `Active` while still holding 1507, 1250 and 456 retryable rows against a retry limit of 5 -- correct dialer behaviour, invisible in the GUI.
+* **Implementation**: Add a `Retries Left` column that **counts the remaining numbers that still have retries available -- one row per phone number still callable -- not the sum of retries remaining and not the retries already consumed**. For campaign 6 above the column reads `1507`. Deliberately reuse the dialer's own exhaustion predicate so the column reaches 0 exactly when the dialer becomes entitled to set `Finish` -- as a `getCampaigns()` subquery: `(SELECT COUNT(*) FROM calls WHERE id_campaign = c.id AND (status IS NULL OR status NOT IN ('Success','Placing','Ringing','OnQueue','OnHold')) AND retries < c.retries AND dnc = 0) AS retries_left`. Then add the cell to the `$arrData[]` row and the header to `setColumns()`, keeping both arrays in the same order; the label goes through `_tr()` with entries in every `lang/<lang>.lang` (en, es, fr, ru, cn, tr, fa).
+* **Open decision**: The predicate above includes never-originated rows, so `Retries Left` is a superset of `Pending Calls` (on the client box campaign 9 showed 13578 pending against 15039 retries-left). Confirm whether that overlap is wanted, or whether never-originated rows should be excluded so the two columns are disjoint -- excluding them breaks the "reaches 0 when the dialer finishes it" property, so the overlap is probably the right call.
+* **Status**: Untouched
+
 ### Hold Timeout Countdown
 
 * **Type**: Feature
@@ -306,6 +327,15 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Date Updated**: 2026-03-09
 * **Location**: `paloSantoConsola.class.php:1132-1143`
 * **Description**: ECCP login/logout events not parsed for monitoring console. **Issue**: The dialer sends `agentloggedin`, `agentfailedlogin`, and `agentloggedout` events via ECCP, but `paloSantoConsola::esperarEventoSesionActiva()` returns **empty events** (just `break`). **Impact**: Monitoring modules (`rep_agents_monitoring`, `rep_incoming_calls_monitoring`) cannot show real-time login/logout/fail events; rely on periodic `getstatus` polling instead. **Two instances**: (1) `agentloggedin` (line 1132-1135) - should return agent_number, queues[], session_start, (2) `agentfailedlogin` (line 1136-1139) - should return agent_number, reason. Also `agentloggedout` (line 1140-1143) partially implemented but missing queue list. **Implementation requires**: Parse event XML from `$evt`, populate `$evento` array with fields, verify ECCP server sends data.
+* **Status**: Untouched
+
+### Mid-Call Logoff Hangup Target
+
+* **Type**: Bug
+* **Urgency**: Low
+* **Date Added**: 2026-10-03
+* **Location**: `setup/dialer_process/dialer/AMIEventProcess.class.php` (`_ejecutarLogoffAgente`, the `Hangup($llamada->agentchannel)` call)
+* **Description**: For an Agent-type login, `agentchannel` is the device name `Agent/NNNN`, never a channel. So every logoff with a call still up logs "No such channel" and spends one synchronous AMI round trip; the fallback below it finalises the call. `actualAgentChannel` holds the real channel (`Llamada.class.php`). But hanging that up would make a mid-call logoff, from the console button or a supervisor, drop the caller: decide that behaviour first.
 * **Status**: Untouched
 
 ---
