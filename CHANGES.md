@@ -7,6 +7,11 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.1.14
+
+- Removed: campaign monitoring's "Phone Off" label and red row, which also marked healthy logged-in Agent-type agents; a phone that stops answering logs its agent out since 5.1.13
+- Removed: the getcampaignstatus queue_status field 5.1.10 added for that label, from the dialer, the console class and the ECCP spec
+
 ## 5.1.13
 
 - Bug fix: the dialer logs out an agent whose extension stops answering qualify (PeerStatus Unreachable), not only when it unregisters — a PJSIP agent too, whose endpoint never reports Unregistered; a call in progress is hung up, as on an unregister
