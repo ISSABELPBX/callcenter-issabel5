@@ -2738,15 +2738,6 @@ class ECCPConn
         }
         if (!is_null($sAgentStatus)) {
             $xml_agent->addChild('status', $sAgentStatus);
-            if (isset($infoAgente['queue_status'])) {
-                // Conservar el estado AMI del dispositivo de cola como dato
-                // estructurado, sin cambiar el contrato histórico del estado
-                // del agente (5 = AST_DEVICE_UNAVAILABLE, 6 = RINGING).
-                // Preserve the AMI queue device state as structured data,
-                // without changing the historical agent-status contract
-                // (5 = AST_DEVICE_UNAVAILABLE, 6 = RINGING).
-                $xml_agent->addChild('queue_status', (int)$infoAgente['queue_status']);
-            }
             if (!is_null($sCanalExt)) $xml_agent->addChild('channel', xmlSafe($sCanalExt));
             if (!is_null($sExtension)) $xml_agent->addChild('extension', $sExtension);
         }

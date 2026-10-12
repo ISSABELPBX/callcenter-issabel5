@@ -864,16 +864,7 @@ function formatoLlamadaNoConectada($activecall)
 
 function formatoAgente($agent)
 {
-    // Etiqueta traducida. "Phone Off" sólo para un agente en línea cuyo
-    // teléfono está caído (estado de dispositivo 5, AST_DEVICE_UNAVAILABLE);
-    // un agente en pausa conserva su etiqueta de pausa.
-    // Translated label. "Phone Off" only for an otherwise-online agent whose
-    // phone is dead (device state 5, AST_DEVICE_UNAVAILABLE); a paused agent
-    // keeps its break label.
-    $sEtiquetaStatus = ($agent['status'] === 'online' &&
-        isset($agent['queue_status']) && $agent['queue_status'] === 5)
-        ? _tr('Phone Off')
-        : _tr($agent['status']);
+    $sEtiquetaStatus = _tr($agent['status']);
     $sFechaHoy = date('Y-m-d');
     $sDesde = '-';
     switch ($agent['status']) {
@@ -897,12 +888,6 @@ function formatoAgente($agent)
     return array(
         'agent'         =>  $agent['agentchannel'],
         'status'        =>  $sEtiquetaStatus,
-        // Estado sin traducir y estado numérico del dispositivo de cola: las
-        // claves a prueba de idioma con las que el cliente colorea la fila.
-        // Untranslated status and numeric queue device state: the locale-proof
-        // keys the client colours the row by.
-        'statuscode'    =>  $agent['status'],
-        'queue_status'  =>  isset($agent['queue_status']) ? (int)$agent['queue_status'] : NULL,
         'callnumber'    =>  is_null($agent['callinfo']['callnumber']) ? '-' : $agent['callinfo']['callnumber'],
         'trunk'         =>  is_null($agent['callinfo']['trunk']) ? '-' : $agent['callinfo']['trunk'],
         'desde'         =>  $sDesde,

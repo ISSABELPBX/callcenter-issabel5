@@ -124,7 +124,6 @@ $arrLangModule=array(
 'Average Call Duration'  =>  'Promedio Duración de Llamada',
 'Maximum Call Duration'  =>  'Duración Máxima de Llamada',
 'Hold'=>'Hold',
-'Phone Off' => 'Teléfono apagado',
 'Invalid request' => 'Solicitud inválida',
 'Session expired' => 'Sesión expirada',
 'Unable to read campaign information' => 'No se puede leer la información de la campaña',

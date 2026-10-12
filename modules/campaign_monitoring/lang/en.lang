@@ -121,7 +121,6 @@ $arrLangModule=array(
 'N/A' => 'N/A', /* Not Available */
 'Previous 100 entries' => 'Previous 100 entries',
 'Hold'=>'Hold',
-'Phone Off' => 'Phone Off',
 'Invalid request' => 'Invalid request',
 'Session expired' => 'Session expired',
 'Unable to read campaign information' => 'Unable to read campaign information',

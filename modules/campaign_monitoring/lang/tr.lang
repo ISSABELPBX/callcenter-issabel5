@@ -127,7 +127,6 @@ $arrLangModule=array(
 'incomingqueue' =>  'Gelen kuyruk',
 'N/A' => 'N/A', /* Not Available */
 'Previous 100 entries' => 'Önceki 100 kayıt',
-'Phone Off' => 'Telefon kapalı',
 'Invalid request' => 'Geçersiz istek',
 'Session expired' => 'Oturum süresi doldu',
 'Unable to read campaign information' => 'Kampanya bilgisi okunamadı',

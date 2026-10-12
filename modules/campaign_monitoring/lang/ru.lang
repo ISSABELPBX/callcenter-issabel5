@@ -123,7 +123,6 @@ $arrLangModule=array(
 'Previous 100 entries' => 'Предыдущие 100 записей',
 'Average Call Duration' => 'Средняя длительность вызова',
 'Maximum Call Duration' => 'Максимальная длительность вызова',
-'Phone Off' => 'Телефон выключен',
 'Invalid request' => 'Неверный запрос',
 'Session expired' => 'Сессия истекла',
 'Unable to read campaign information' => 'Не удалось прочитать информацию о кампании',

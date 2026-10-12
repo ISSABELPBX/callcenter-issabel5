@@ -389,20 +389,18 @@ $(document).ready(function() {
 				}
 			for (var i = 0; i < respuesta.agents.add.length; i++) {
 				  var agente = respuesta.agents.add[i];
-				  const agentUpdate = agentUpdateColor(agente.status, agente.agent, agente.queue_status, agente.statuscode);
+				  const agentUpdate = agentUpdateColor(agente.status, agente.agent);
 				  this.agentes.addObject(Ember.Object.create({
 				    canal:     agente.agent,
 				    numero:    agente.callnumber,
 				    troncal:   agente.trunk,
 				    estado:    agente.status,
-				    statuscode: agente.statuscode,
-				    qs:        agente.queue_status,
 				    image: 	   Ember.String.htmlSafe(agentUpdate.statusImage),
 				    desde:     agente.desde,
 				    rtime:     new Date(),
 				    reciente:  true
 				  }));
-				  agentColor(agente.status, agente.agent, agente.queue_status, agente.statuscode);
+				  agentColor(agente.status, agente.agent);
 				}
 			// Re-sort agents after adding: offline agents at bottom
 			if (respuesta.agents.add.length > 0) {
@@ -413,7 +411,7 @@ $(document).ready(function() {
 			if (respuesta.agents != null && respuesta.agents.update != null) {
 			    for (var i = 0; i < respuesta.agents.update.length; i++) {
 			        var agente = respuesta.agents.update[i];
-			        const agentUpdate = agentUpdateColor(agente.status, agente.agent, agente.queue_status, agente.statuscode);
+			        const agentUpdate = agentUpdateColor(agente.status, agente.agent);
 			        var agenteLista = this.agentes.findBy('canal', agente.agent);
 			        //console.log(agenteLista);
 			        if (agenteLista != null) {
@@ -421,8 +419,6 @@ $(document).ready(function() {
 			                'numero':   agente.callnumber,
 			                'troncal':  agente.trunk,
 			                'estado':   agente.status,
-			                'statuscode': agente.statuscode,
-			                'qs':       agente.queue_status,
 			                'image':    Ember.String.htmlSafe(agentUpdate.statusImage),
 			                'desde':    agente.desde,
 			                'rtime':    new Date(),
@@ -499,7 +495,7 @@ $(document).ready(function() {
 			sortedAgents.forEach(function(agent) {
 				self.agentes.pushObject(agent);
 				// Re-apply color styling after re-adding
-				agentColor(agent.get('estado'), agent.get('canal'), agent.get('qs'), agent.get('statuscode'));
+				agentColor(agent.get('estado'), agent.get('canal'));
 			});
 		},
 		actions: {
@@ -608,19 +604,10 @@ function mostrar_mensaje_error(s)
 }
 
 
-function agentColor(status, canal, qs, statuscode) {
+function agentColor(status, canal) {
 setTimeout(() => {
 
-  // A phone whose queue device state is UNAVAILABLE (5) paints the row red,
-  // but only while the agent is online or paused: a stale queue_status from
-  // the last full status read must never paint an agent on a call red.
-  // Checked before the label switch, and keyed on the number, never the
-  // translated label.
-  // Un teléfono con estado de dispositivo de cola UNAVAILABLE (5) pinta la
-  // fila de rojo, pero sólo mientras el agente está en línea o en pausa.
-  if (qs === 5 && (statuscode === 'online' || statuscode === 'paused')) {
-    color = '#f33';
-  } else if (status.includes('On break') || status.includes('En descanso') || status.includes('En pause') || status.includes('На перерыве') || status.includes('Molada')) {
+  if (status.includes('On break') || status.includes('En descanso') || status.includes('En pause') || status.includes('На перерыве') || status.includes('Molada')) {
     color = 'orange';
   } else {
     switch (status) {
@@ -640,7 +627,6 @@ setTimeout(() => {
       case 'Meşgul':
         color = 'yellow';
         break;
-      case 'Unavailable':
       case 'Logged out':
       case 'No logon':
       case 'Déconnecté':
@@ -662,19 +648,10 @@ setTimeout(() => {
 	}, 100);
 }
 
-function agentUpdateColor(status, canal, qs, statuscode) {
+function agentUpdateColor(status, canal) {
   let statusImage;
 
-  // Same gate as agentColor, checked before the label switch: a dead phone
-  // (queue device state 5) shows the disconnected icon on a red row, but
-  // only while the agent is online or paused - never on a call.
-  // Misma condición que agentColor, antes del switch: un teléfono caído
-  // (estado de dispositivo 5) muestra el icono de desconectado sobre fila
-  // roja, pero sólo en línea o en pausa - nunca en llamada.
-  if (qs === 5 && (statuscode === 'online' || statuscode === 'paused')) {
-    color = '#f33';
-    statusImage = '<img src="/modules/' + module_name + '/images/agent-disconected.png" alt="Desconectado" style="padding-right:1px;"/>';
-  } else if (status.includes('On break') || status.includes('En descanso') || status.includes('En pause') || status.includes('На перерыве') || status.includes('Molada')) {
+  if (status.includes('On break') || status.includes('En descanso') || status.includes('En pause') || status.includes('На перерыве') || status.includes('Molada')) {
     color = 'orange';
     statusImage = '<img src="/modules/' + module_name + '/images/agent-break.png" alt="En Break" style="padding-right:1px;"/>';
   } else {
@@ -720,12 +697,10 @@ for (let i = 0; i < elements.length; i++) {
   return { statusImage};
 }
 
-// The per-agent last-call times, from the authenticated module action. The
-// retired directly-served endpoint is gone; the dead-phone mark arrives
-// through checkStatus as the numeric queue_status, never here.
+// The per-agent last-call times, from the authenticated module action; the
+// retired directly-served endpoint is gone.
 // Las horas de última llamada por agente, desde la acción autenticada del
-// módulo. El punto de entrada directo retirado ya no existe; la marca de
-// teléfono caído llega por checkStatus como queue_status numérico, nunca aquí.
+// módulo; el punto de entrada directo retirado ya no existe.
 function loadAgentLastCalls(campaignType, idCampaign, respuesta, agentes) {
     $.get('index.php', {
         menu:			module_name,

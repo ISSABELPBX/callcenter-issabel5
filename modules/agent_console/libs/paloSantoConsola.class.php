@@ -601,13 +601,6 @@ class PaloSantoConsola
             'status'            =>  (string)$connStatus->status,
             'channel'           =>  isset($connStatus->channel) ? (string)$connStatus->channel : NULL,
             'extension'         =>  isset($connStatus->extension) ? (string)$connStatus->extension : NULL,
-            // Device state of the agent's queue interface as the dialer reports
-            // it (AST_DEVICE_*: 5 = UNAVAILABLE, 6 = RINGING). NULL when the
-            // dialer did not send the field.
-            // Estado del dispositivo de cola del agente según lo reporta el
-            // marcador (AST_DEVICE_*: 5 = UNAVAILABLE, 6 = RINGING). NULL si el
-            // marcador no envió el campo.
-            'queue_status'      =>  isset($connStatus->queue_status) ? (int)$connStatus->queue_status : NULL,
             'onhold'            =>  isset($connStatus->onhold) ? ($connStatus->onhold == 1) : FALSE,
             // Start of the running hold, so the status bar's hold timer can be
             // restored on a page reload instead of restarting from zero.

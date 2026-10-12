@@ -1689,13 +1689,6 @@ Respuesta:
   * agentchannel: Canal del agente de la cola (normalmente Agent/NNNN)
   * status: Estado del agente. Puede ser 'online', 'offline', 'oncall', 'paused'
     como se describe en la respuesta del requerimiento 'getagentstatus'
-  * queue_status: Estado del dispositivo de cola del agente según Asterisk
-    (AST_DEVICE_*), como número de 0 a 8; por ejemplo 5 = UNAVAILABLE
-    (teléfono caído o inalcanzable) y 6 = RINGING. Sólo está definido si el
-    marcador conoce el estado del agente en alguna cola. / Queue interface
-    device state as Asterisk reports it (AST_DEVICE_*), as a number 0-8; for
-    example 5 = UNAVAILABLE (phone dead or unreachable) and 6 = RINGING.
-    Only defined when the dialer knows the agent's state in some queue.
   * callid: ID en la base de datos de la llamada que atiende el agente. Sólo está
     definido si el agente está logoneado y atendiendo alguna llamada.
   * callnumber: Número telefónico del cliente al que se conecta la llamada. Sólo
@@ -1772,7 +1765,6 @@ Campaña saliente:
             <agent>
                 <agentchannel>Agent/9000</agentchannel>
                 <status>online</status>
-                <queue_status>1</queue_status>
             </agent>
         </agents>
         <activecalls>
@@ -1806,7 +1798,6 @@ Campaña entrante:
             <agent>
                 <agentchannel>Agent/9000</agentchannel>
                 <status>offline</status>
-                <queue_status>0</queue_status>
             </agent>
         </agents>
         <activecalls/>
@@ -3366,13 +3357,6 @@ Respuesta:
   * agentchannel: Canal del agente de la cola (normalmente Agent/NNNN)
   * status: Estado del agente. Puede ser 'online', 'offline', 'oncall', 'paused'
     como se describe en la respuesta del requerimiento 'getagentstatus'
-  * queue_status: Estado del dispositivo de cola del agente según Asterisk
-    (AST_DEVICE_*), como número de 0 a 8; por ejemplo 5 = UNAVAILABLE
-    (teléfono caído o inalcanzable) y 6 = RINGING. Sólo está definido si el
-    marcador conoce el estado del agente en alguna cola. / Queue interface
-    device state as Asterisk reports it (AST_DEVICE_*), as a number 0-8; for
-    example 5 = UNAVAILABLE (phone dead or unreachable) and 6 = RINGING.
-    Only defined when the dialer knows the agent's state in some queue.
   * callid: ID en la base de datos de la llamada que atiende el agente. Sólo está
     definido si el agente está logoneado y atendiendo alguna llamada.
   * callnumber: Número telefónico del cliente al que se conecta la llamada. Sólo

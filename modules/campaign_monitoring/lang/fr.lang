@@ -121,7 +121,6 @@ $arrLangModule=array(
 'incomingqueue' =>  'File entrante',
 'N/A' => 'N/A', /* Not Available */
 'Previous 100 entries' => '100 entrées précédentes',
-'Phone Off' => 'Téléphone éteint',
 'Invalid request' => 'Requête invalide',
 'Session expired' => 'Session expirée',
 'Unable to read campaign information' => 'Impossible de lire les informations de la campagne',
