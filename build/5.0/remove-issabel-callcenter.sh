@@ -32,6 +32,16 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1090
+source "$SCRIPT_DIR/callcenter-common.sh"
+
+# An installation made by the issabel-callcenter5 RPM is managed by RPM:
+# this script would delete files the package still lists, leaving rpm
+# reporting them missing until the package itself is erased. Refused here,
+# before the first effect (the service stop just below).
+cc_refuse_if_rpm_installed || exit 1
+
 
 #stop service and disable it
 systemctl stop issabeldialer 2>/dev/null || true
@@ -67,14 +77,11 @@ DASHBOARD_DIR="/var/www/html/modules/dashboard/applets/ProcessesStatus"
 DASHBOARD_INDEX="$DASHBOARD_DIR/index.php"
 
 if [ -f "$DASHBOARD_INDEX" ]; then
-    # Remove Dialer icon mapping
-    sed -i "/'Dialer'.*=>.*'icon_headphones.png'/d" "$DASHBOARD_INDEX"
+    # The icon mapping and icon_headphones.png itself are stock (issabel-system): not ours to delete.
     # Remove Dialer service mapping
     sed -i "/'Dialer'.*=>.*'issabeldialer'/d" "$DASHBOARD_INDEX"
     # Remove Dialer status detection lines
     sed -i '/\$arrSERVICES\["Dialer"\]/d' "$DASHBOARD_INDEX"
-    # Remove the icon file
-    rm -f "$DASHBOARD_DIR/images/icon_headphones.png"
     echo "Removed dashboard ProcessesStatus patches"
 fi
 

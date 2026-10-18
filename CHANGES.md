@@ -7,6 +7,23 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.2.17
+
+- New feature: a GitHub Actions workflow (.github/workflows/build-rpm.yml) builds the issabel-callcenter5 RPM on a major release - a VERSION bump outside the last field (5.1.16 -> 5.2.17) - through primasoft-dev/rpm-package-action on Rocky 8, uploads it as an artifact and attaches it to the v<VERSION> GitHub Release; workflow_dispatch builds any version by hand, with the rebuild counter as input
+- New feature: build/5.0/ci-rpm-gate.sh decides from the VERSION before and after a push whether it is a major release - one line on stdout, the reason on stderr, exit 0 whenever it decided; an ordinary last-digit bump builds nothing
+
+## 5.1.16
+
+- Improve: the issabel-callcenter5 RPM's Version is the whole VERSION and its Release a rebuild counter (CC_RPM_RELEASE, default 1), e.g. issabel-callcenter5-5.1.16-1.el8
+- Removed: CHANGELOG_OLD.md from the RPM; the package changelog points to the repository, and the shell installer still deploys it
+
+## 5.1.15
+
+- New feature: an issabel-callcenter5 RPM, built in one command by build/5.0/build-rpm.sh from build/5.0/issabel-callcenter.spec; VERSION 5.1.x becomes Version 5, Release 1.x.el8, and an erase keeps the call_center database
+- New feature: the issabel-callcenter5 RPM refuses to install over the previous issabel-callcenter package, and says to remove it first: that keeps the call_center database, which the install then migrates to a v5-compatible schema
+- New feature: the install, update and remove scripts refuse on a box installed from the issabel-callcenter5 RPM, and name the rpm command to use
+- Bug fix: the installer no longer overwrites, and the remover no longer deletes, the dashboard's icon_headphones.png and its icon mapping, which issabel-system ships
+
 ## 5.1.14
 
 - Removed: campaign monitoring's "Phone Off" label and red row, which also marked healthy logged-in Agent-type agents; a phone that stops answering logs its agent out since 5.1.13
