@@ -98,3 +98,20 @@ cc_dest_for() {
             return 1 ;;
     esac
 }
+
+# cc_refuse_if_rpm_installed
+# When the issabel-callcenter5 RPM owns this installation, refuse: the
+# installer, updater and remover would copy over or delete files the package
+# owns - the rpm database would go wrong (rpm -V reports a drift the next
+# rpm -Uvh silently reverts; a later rpm -e runs against files already
+# gone). An RPM installation is managed by RPM. Prints the refusal, in the
+# scripts' existing message style, to stderr and returns 1; returns 0
+# silently when no issabel-callcenter5 RPM is installed.
+cc_refuse_if_rpm_installed() {
+    rpm -q issabel-callcenter5 >/dev/null 2>&1 || return 0
+    echo "Error: this Issabel CallCenter installation was made by the issabel-callcenter5 RPM ($(rpm -q issabel-callcenter5))." >&2
+    echo "These scripts must not change an RPM installation; use RPM instead:" >&2
+    echo "    update:  rpm -Uvh <newer issabel-callcenter5 RPM>   (or: dnf upgrade issabel-callcenter5)" >&2
+    echo "    remove:  rpm -e issabel-callcenter5                 (the call_center database is kept)" >&2
+    return 1
+}

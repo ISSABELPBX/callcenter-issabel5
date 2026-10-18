@@ -1,0 +1,167 @@
+# Builds the issabel-callcenter5 RPM when VERSION crosses a major release
+# (a bump outside the last field, 5.1.16 -> 5.2.17); every ordinary change
+# bumps only the last digit and builds nothing. The decision is
+# build/5.0/ci-rpm-gate.sh's, from the VERSION before and after the push.
+# workflow_dispatch builds any checked-out version by hand, with the rebuild
+# counter (CC_RPM_RELEASE) as an input; a dispatch run gives an artifact
+# only - a Release is published by a gated push alone.
+#
+# The build itself runs through primasoft-dev/rpm-package-action (a fork of
+# xmidt-org/rpm-package-action) with its build-command input, which runs
+# bash build/5.0/build-rpm.sh inside the action's Rocky 8 container - the
+# same entry point a person runs, on an EL8 host so the dist tag is .el8.
+name: RPM
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - VERSION
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Rebuild counter (CC_RPM_RELEASE)'
+        default: '1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rpm-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.new }}
+      built: ${{ steps.gate.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0    # the gate reads VERSION as it was before the push
+      - name: Read the VERSION numbers
+        id: ver
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # This step runs on the runner itself, where the workspace belongs
+          # to the runner's user, so git needs no safe.directory here. A git
+          # that cannot read the repository must still fail the run red,
+          # never quietly skip a build.
+          if ! git rev-parse --verify HEAD >/dev/null 2>&1; then
+              echo "Error: git cannot read the repository at $GITHUB_WORKSPACE." >&2
+              exit 1
+          fi
+          # VERSION is read the way build-rpm.sh and the installers read it,
+          # through callcenter-common.sh's cc_read_version (the first line,
+          # without CR or blanks). A VERSION saved with Windows line endings
+          # or a stray space then decides here exactly as it builds.
+          source build/5.0/callcenter-common.sh
+          if ! new="$(cc_read_version .)"; then
+              echo "Error: no readable VERSION at $(git rev-parse HEAD)." >&2
+              exit 1
+          fi
+          old=''
+          if [ "${GITHUB_EVENT_NAME:-}" = push ]; then
+              if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+                  echo 'note: first push of this branch - no previous VERSION to compare.' >&2
+              elif ! git cat-file -e "$BEFORE" 2>/dev/null; then
+                  echo "note: the previous head $BEFORE is not in this clone (rewritten history) - no previous VERSION to compare." >&2
+              else
+                  mkdir -p "$RUNNER_TEMP/before"
+                  git show "$BEFORE:VERSION" > "$RUNNER_TEMP/before/VERSION" 2>/dev/null || true
+                  old="$(cc_read_version "$RUNNER_TEMP/before" || true)"
+              fi
+          fi
+          echo "old=$old" >> "$GITHUB_OUTPUT"
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+      - name: Major release?
+        id: gate
+        env:
+          OLD: ${{ steps.ver.outputs.old }}
+          NEW: ${{ steps.ver.outputs.new }}
+        run: |
+          # The gate's contract: exit 0 whenever it decided, exactly one
+          # line on stdout (build=true|build=false), the reason on stderr.
+          # Anything else fails this step red - a broken gate must never
+          # skip a major release with a green run.
+          rc=0
+          line="$(bash build/5.0/ci-rpm-gate.sh "$OLD" "$NEW" 2>"$RUNNER_TEMP/gate-reason")" || rc=$?
+          cat "$RUNNER_TEMP/gate-reason" >&2
+          if [ "$rc" -ne 0 ]; then
+              echo "Error: the gate failed (exit $rc)." >&2
+              exit 1
+          fi
+          case "$line" in
+              build=true|build=false) ;;
+              *)
+                  echo "Error: the gate printed '$line', not build=true or build=false." >&2
+                  exit 1 ;;
+          esac
+          printf '%s\n' "$line" >> "$GITHUB_OUTPUT"
+      - name: Build the RPM
+        if: steps.gate.outputs.build == 'true'
+        uses: primasoft-dev/rpm-package-action@v5.1.2
+        with:
+          path: .
+          spec: build/5.0/issabel-callcenter.spec
+          distro: rocky-8
+          build-command: bash build/5.0/build-rpm.sh
+      # The dist tag comes from the build container, so it is checked, not
+      # assumed: exactly one RPM, named
+      # issabel-callcenter5-<VERSION>-<the release input or 1>.el8.noarch.rpm.
+      # A build without .el8 is a red run, never an uploaded artifact.
+      - name: Check the built package name
+        if: steps.gate.outputs.build == 'true'
+        env:
+          CC_RPM_RELEASE: ${{ github.event.inputs.release }}
+          NEW: ${{ steps.ver.outputs.new }}
+        run: |
+          v="$NEW"
+          r="${CC_RPM_RELEASE:-1}"
+          want="issabel-callcenter5-${v}-${r}.el8.noarch.rpm"
+          set -- build/rpm/RPMS/noarch/*.rpm
+          if [ "$#" -ne 1 ]; then
+              echo "Error: expected exactly one RPM in build/rpm/RPMS/noarch/, found $#." >&2
+              exit 1
+          fi
+          if [ "$(basename "$1")" != "$want" ]; then
+              echo "Error: built '$(basename "$1")', expected '$want'." >&2
+              echo "The dist tag must be .el8; a build without it is never uploaded." >&2
+              exit 1
+          fi
+          echo "ok: $want"
+      - name: Upload the RPM
+        if: steps.gate.outputs.build == 'true'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issabel-callcenter5-${{ steps.ver.outputs.new }}-rpm
+          path: build/rpm/RPMS/noarch/*.rpm
+          if-no-files-found: error
+  release:
+    needs: build
+    if: needs.build.outputs.built == 'true' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: issabel-callcenter5-${{ needs.build.outputs.version }}-rpm
+      # A re-run of the same push must be safe: reuse the tag when it
+      # exists, then clobber the asset with the new file. A new tag points
+      # at the commit that was built, not at the branch's newest one.
+      - name: Attach the RPM to the v<VERSION> release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          tag="v${VERSION}"
+          gh release view "$tag" -R "$GITHUB_REPOSITORY" ||
+              gh release create "$tag" -R "$GITHUB_REPOSITORY" \
+                  --target "$GITHUB_SHA" \
+                  --title "issabel-callcenter5 ${VERSION}" --generate-notes
+          gh release upload "$tag" --clobber -R "$GITHUB_REPOSITORY" \
+              "issabel-callcenter5-${VERSION}-"*.rpm

@@ -46,6 +46,25 @@ bash build/5.0/update-issabel-callcenter.sh
 # To Uninstall:
 bash build/5.0/remove-issabel-callcenter.sh
 
+# RPM packaging (one command; the Version is the whole VERSION, the Release a rebuild counter, default 1):
+bash build/5.0/build-rpm.sh
+# GitHub Actions also builds the RPM on a major release (a VERSION bump
+# outside the last field) through primasoft-dev/rpm-package-action: artifact
+# plus the v<VERSION> Release; by hand from the Actions tab, artifact only.
+# Install the produced package with:
+rpm -Uvh issabel-callcenter5-<version>-<release>.el8.noarch.rpm
+# An RPM-installed box is updated with `rpm -Uvh <newer RPM>` (or
+# `dnf upgrade issabel-callcenter5`) and removed with
+# `rpm -e issabel-callcenter5` (the call_center database is kept).
+# On an RPM-installed box the three shell scripts above refuse and name
+# the rpm command to use instead.
+# On a box that still has the previous package, issabel-callcenter, the
+# install refuses. Remove it first:
+rpm -e issabel-callcenter
+# That keeps the call_center database, and installing issabel-callcenter5
+# afterwards migrates that database to a v5-compatible schema. (dnf may show only
+# its own refusal line, so this README says it in full.)
+
 # Service management
 systemctl start issabeldialer
 systemctl status issabeldialer

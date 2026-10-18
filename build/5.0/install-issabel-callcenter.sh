@@ -120,6 +120,12 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
+# An installation made by the issabel-callcenter5 RPM is managed by RPM:
+# this script must not clone, copy over or remove files the package owns.
+# Refused here, before the first effect (the GitHub clone below, or the
+# in-place update's exec of the updater).
+cc_refuse_if_rpm_installed || exit 1
+
 # Determine the installation source and read its version BEFORE looking for
 # an existing installation: without -l the installer clones GitHub and
 # installs THAT, so the update decision must be made against the clone, not
@@ -331,8 +337,9 @@ DASHBOARD_DIR="/var/www/html/modules/dashboard/applets/ProcessesStatus"
 DASHBOARD_INDEX="$DASHBOARD_DIR/index.php"
 
 if [ -f "$DASHBOARD_INDEX" ]; then
-    # Copy the dialer icon
-    /bin/cp -f "$WORK_DIR/setup/icon_headphones.png" "$DASHBOARD_DIR/images/"
+    # Copy the dialer icon, only when missing: issabel-system ships it.
+    [ -f "$DASHBOARD_DIR/images/icon_headphones.png" ] || \
+        /bin/cp -f "$WORK_DIR/setup/icon_headphones.png" "$DASHBOARD_DIR/images/"
 
     # 1. Add Dialer icon mapping (after 'Apache' => 'icon_www.png')
     if ! grep -q "'Dialer'" "$DASHBOARD_INDEX"; then
