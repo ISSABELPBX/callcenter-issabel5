@@ -617,6 +617,36 @@ class Llamada
             $sDialstring = $this->dialstring;
         }
 
+        /* Sin conexión AMI no hay forma de iniciar la llamada: se termina aquí
+         * igual que un Originate rechazado, reutilizando la rama de falla de
+         * _cb_Originate() para registrar el Failure, quitar la llamada de la
+         * lista y liberar al agente agendado. Antes de esta guarda, llamar a
+         * asyncOriginate() sobre una conexión NULL mataba la tarea
+         * AMIEventProcess con un Error de PHP. Se devuelve TRUE porque el
+         * callback ya envió la respuesta FALSE al solicitante; devolver FALSE
+         * haría que _ejecutarOriginate() respondiera una segunda vez.
+         * Without an AMI connection there is no way to start the call: it is
+         * ended here exactly like a refused Originate, reusing _cb_Originate()'s
+         * failure branch to record the Failure, remove the call from the list
+         * and release the scheduled agent. Before this guard, calling
+         * asyncOriginate() on a NULL connection killed the AMIEventProcess
+         * task with a PHP Error. TRUE is returned because the callback already
+         * answered the requester with FALSE; returning FALSE would make
+         * _ejecutarOriginate() answer a second time. */
+        if (is_null($ami)) {
+            $this->_log->output('ERR: '.__METHOD__.
+                " campania {$this->tipo_llamada} ID={$this->campania->id} ".
+                (($this->tipo_llamada == 'outgoing') ? " cola {$this->campania->queue} " : '').
+                "sin conexión AMI, se descarta la llamada ID={$this->id_llamada}".
+                " | EN: campaign {$this->tipo_llamada} ID={$this->campania->id} ".
+                (($this->tipo_llamada == 'outgoing') ? " queue {$this->campania->queue} " : '').
+                "no AMI connection, call ID={$this->id_llamada} is discarded");
+            $this->_cb_Originate(
+                array('Response' => 'Error', 'Message' => '(internal) AMI connection not ready'),
+                $sFuente, $timestamp, $retry, $trunk);
+            return TRUE;
+        }
+
         $callable = array($this, '_cb_Originate');
         $callable_params = array($sFuente, $timestamp, $retry, $trunk);
         $ami->asyncOriginate(
@@ -643,11 +673,21 @@ class Llamada
                 " | EN: campaign {$this->tipo_llamada} ID={$this->campania->id} ".
                 (($this->tipo_llamada == 'outgoing') ? " queue {$this->campania->queue} " : '').
                 "cannot call number");
-            if ($this->status == 'Placing') $this->status = 'Failure';
+            /* Una llamada nueva todavía no tiene status: Placing se asigna solo
+             * ante una respuesta exitosa (más abajo). Si el Originate es
+             * rechazado de inmediato, el status sigue NULL aquí, y sin esta
+             * comparación el aviso de progreso llevaría un status NULL que
+             * call_progress_log rechaza.
+             * A newly created call has no status yet: Placing is only set on a
+             * successful response (below). When the Originate is refused at
+             * once the status is still NULL here, and without this comparison
+             * the progress notice would carry a NULL status that
+             * call_progress_log rejects. */
+            if (is_null($this->status) || $this->status == 'Placing') $this->status = 'Failure';
 
             // Notificar el progreso de la llamada
             $paramProgreso = array(
-                'datetime_entry'                    =>  time() /*$this->timestamp_originatestart*/,
+                'datetime_entry'                    =>  date('Y-m-d H:i:s'),
                 'new_status'                        =>  $this->status,
                 'retry'                             =>  $retry,
                 'trunk'                             =>  $trunk,
@@ -1186,7 +1226,7 @@ class Llamada
             'datetime_entry'    =>  date('Y-m-d H:i:s', $this->timestamp_hangup),
             'queue'             =>  $this->_queuenumber,
         );
-        
+
         /*
         $ruta = '/var/www/html/modules/agent_console/archivo.txt';
         $file = fopen($ruta, 'w');
@@ -1319,7 +1359,7 @@ class Llamada
             $this->_listaLlamadas->remover($this);
         }
 
-        
+
     }
 
     public function agregarArchivoGrabacion($uniqueid, $channel, $recordingfile)

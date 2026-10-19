@@ -476,9 +476,18 @@ function esErrorPermanente(PDOException $e)
     /* 23000 - violación de integridad referencial | integrity constraint violation
      *         (1452 clave foránea | foreign key, 1062 clave duplicada | duplicate key,
      *          1048 columna no nula | not null column)
+     * 22xxx - dato inválido (fecha, longitud, rango) | data exception (date, length, range)
      * 42S22 - columna inexistente                 | unknown column
      * 42S02 - tabla inexistente                   | unknown table
-     * 42000 - error de sintaxis o de permisos     | syntax error or access violation */
+     * 42000 - error de sintaxis o de permisos     | syntax error or access violation
+     *
+     * Un error de dato jamás se corrige reintentando: el valor ofendido sigue
+     * en la acción y cada reintento fracasa igual, con la cola bloqueada tras
+     * él mientras tanto, así que se descarta de inmediato.
+     * A data error is never fixed by retrying: the offending value is still in
+     * the action and every retry fails the same way, with the queue blocked
+     * behind it in the meantime, so it is dropped at once. */
+    if (strncmp((string)$info[0], '22', 2) === 0) return TRUE;    // SQLSTATE class 22: data exception
     return in_array((string)$info[0], array('23000', '42S22', '42S02', '42000'), TRUE);
 }
 ?>

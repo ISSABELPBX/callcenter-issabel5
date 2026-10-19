@@ -7,6 +7,12 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.2.18
+
+- Bug fix: a refused Originate records its Failure in call_progress_log - the failure notice carried no status and a raw epoch timestamp, so MariaDB rejected the row and it was lost
+- Bug fix: a database data error (SQLSTATE class 22: bad date, value too long, out of range) is logged and dropped at once, instead of retried 50 times with every dialer database write waiting about 10 minutes behind it
+- Bug fix: a call the dialer cannot place for want of an AMI connection ends as a Failure, like a refused Originate, instead of crashing AMIEventProcess and losing its agents and calls
+
 ## 5.2.17
 
 - New feature: a GitHub Actions workflow (.github/workflows/build-rpm.yml) builds the issabel-callcenter5 RPM on a major release - a VERSION bump outside the last field (5.1.16 -> 5.2.17) - through primasoft-dev/rpm-package-action on Rocky 8, uploads it as an artifact and attaches it to the v<VERSION> GitHub Release; workflow_dispatch builds any version by hand, with the rebuild counter as input
