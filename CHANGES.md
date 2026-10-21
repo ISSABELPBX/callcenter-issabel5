@@ -7,6 +7,10 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.2.22
+
+- Improve: a patch file lives only in the newest version that ships it; `build/5.0/prune-patches.sh` deletes older copies (17 removed), `--check` lists them
+
 ## 5.2.21
 
 - Bug fix: the dialer's queue refresh (every 5 minutes, on an ECCP refreshagents and on an Asterisk reload) no longer wipes the call start of every busy queue member, which made predictive campaigns stop counting busy agents as about to free until their next call
