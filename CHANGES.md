@@ -7,6 +7,18 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.2.21
+
+- Bug fix: the dialer's queue refresh (every 5 minutes, on an ECCP refreshagents and on an Asterisk reload) no longer wipes the call start of every busy queue member, which made predictive campaigns stop counting busy agents as about to free until their next call
+
+## 5.2.20
+
+- Bug fix: the Calls Detail report sorts every call by when it entered the queue (datetime_entry_queue; an outbound call that never reached the queue by when it was dialled), newest first - abandoned and failed calls, which have no start time, fell below every answered call in phone-number order
+
+## 5.2.19
+
+- Bug fix: a queue's predicted slots are split between the outgoing campaigns sharing it, by the idle agents each holds, with leftovers rotating - they all went to the first campaign in list order, every cycle in which several campaigns held an idle agent; waiting callers are now subtracted once per queue
+
 ## 5.2.18
 
 - Bug fix: a refused Originate records its Failure in call_progress_log - the failure notice carried no status and a raw epoch timestamp, so MariaDB rejected the row and it was lost

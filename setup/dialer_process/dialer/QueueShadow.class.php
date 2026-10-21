@@ -87,7 +87,7 @@ class QueueShadow
 
     function msg_QueueMember($params)
     {
-        if (!isset($this->_queues[$params['Queue']][$params['Location']])) {
+        if (!isset($this->_queues[$params['Queue']]['members'][$params['Location']])) {
             $this->_queues[$params['Queue']]['members'][$params['Location']] = array(
                 'removed'   => FALSE,
                 'Status'    => $params['Status'],

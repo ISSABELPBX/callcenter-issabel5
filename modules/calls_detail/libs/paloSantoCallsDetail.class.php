@@ -304,7 +304,8 @@ SELECT agent.number, agent.name, call_entry.datetime_init AS start_date,
     call_entry.datetime_end AS end_date, call_entry.duration,
     call_entry.duration_wait, queue_call_entry.queue, 'Inbound' AS type,
     IF(contact.telefono IS NULL, call_entry.callerid, contact.telefono) AS telefono,
-    call_entry.transfer, call_entry.status, call_entry.id AS idx
+    call_entry.transfer, call_entry.status, call_entry.id AS idx,
+    call_entry.datetime_entry_queue AS sort_time
 FROM (call_entry, queue_call_entry)
 LEFT JOIN contact
     ON contact.id = call_entry.id_contact
@@ -322,7 +323,8 @@ SELECT agent.number, agent.name, calls.start_time AS start_date,
     calls.end_time AS end_date, calls.duration,
     calls.duration_wait, campaign.queue, 'Outbound' AS type,
     calls.phone AS telefono,
-    calls.transfer, calls.status, calls.id AS idx
+    calls.transfer, calls.status, calls.id AS idx,
+    COALESCE(calls.datetime_entry_queue, calls.fecha_llamada) AS sort_time
 FROM (calls, campaign)
 LEFT JOIN agent
     ON agent.id = calls.id_agent
@@ -350,7 +352,15 @@ SQL_OUTGOING;
             $paramSQL = array_merge($param_incoming, $param_outgoing);
             break;
         }
-        $sPeticionSQL .= ' ORDER BY start_date DESC, telefono';
+        // Ordenar por cuando la llamada entró en la cola; una llamada
+        // saliente que nunca llegó a la cola, por cuando fue marcada. Así las
+        // llamadas sin hora de inicio (no contestadas) quedan en su lugar en
+        // el orden de tiempo, y no debajo de todas las contestadas.
+        // EN: Order by when the call entered the queue; an outgoing call that
+        // EN: never reached the queue, by when it was dialled. Calls with no
+        // EN: start time (unanswered) then sit in time order instead of below
+        // EN: every answered call.
+        $sPeticionSQL .= ' ORDER BY sort_time DESC, telefono';
         if (!empty($limit)) {
             $sPeticionSQL .= " LIMIT ? OFFSET ?";
             array_push($paramSQL, $limit, $offset);
@@ -378,6 +388,15 @@ SQL_OUTGOING;
             'Outbound'  =>  'id_call_outgoing',
         );
         foreach (array_keys($recordset) as $i) {
+            /* La columna 12 es sólo la llave de orden, ajena al reporte:
+             * array_pop (y no unset, que dejaría el índice siguiente en 13)
+             * libera el índice 12, para que el arreglo de grabaciones añadido
+             * más abajo caiga en 12 igual que antes, donde lo lee index.php. */
+            /* EN: Column 12 is only the sort key, not part of the report:
+             * EN: array_pop (not unset, which would leave the next index at
+             * EN: 13) frees index 12, so the recordings array appended below
+             * EN: lands at 12 exactly as before, where index.php reads it. */
+            array_pop($recordset[$i]);
             /* Se asume que el tipo de llamada está en la columna 7 y el ID del
              * intento de llamada en la columna 11. */
             /* EN: It is assumed that call type is in column 7 and call attempt */
