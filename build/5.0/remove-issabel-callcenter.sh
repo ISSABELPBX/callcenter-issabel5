@@ -36,7 +36,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1090
 source "$SCRIPT_DIR/callcenter-common.sh"
 
-# An installation made by the issabel-callcenter5 RPM is managed by RPM:
+# An installation made by the issabel-callcenter-ce RPM is managed by RPM:
 # this script would delete files the package still lists, leaving rpm
 # reporting them missing until the package itself is erased. Refused here,
 # before the first effect (the service stop just below).

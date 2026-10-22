@@ -7,6 +7,14 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.3.24
+
+- Bug fix: the RPM no longer carries icon_headphones.png or patches the dashboard ProcessesStatus applet on install or erase; both belong to issabel-system
+
+## 5.2.23
+
+- Improve: the RPM package is renamed issabel-callcenter-ce (was issabel-callcenter5), Summary "Issabel v5 Call Center Community Edition"; the build, the CI artifact and the Release asset carry the new name
+
 ## 5.2.22
 
 - Improve: a patch file lives only in the newest version that ships it; `build/5.0/prune-patches.sh` deletes older copies (17 removed), `--check` lists them
