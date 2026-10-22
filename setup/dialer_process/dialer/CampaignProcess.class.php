@@ -121,9 +121,19 @@ class CampaignProcess extends TuberiaProcess
      * max_canales crudo por campaña (no reducido por llamadas activas), usado para rotación */
     private $_campaignRawMaxCanales = array();  // [campaign_id => raw_max_canales]
 
-    /* Predictive slots claimed per queue this cycle (prevents double-counting across shared queues)
-     * Slots predictivos reclamados por cola en este ciclo (previene doble conteo en colas compartidas) */
-    private $_predictiveSlotsUsed = array();  // [queue => int]
+    /* Predictive boost share per campaign for this cycle, from the per-queue
+     * fair split computed before the campaigns are processed.
+     * Cuota de impulso predictivo por campaña para este ciclo, del reparto
+     * justo por cola calculado antes de procesar las campañas. */
+    private $_predictiveBoostShare = array();  // [campaign_id => int]
+
+    /* Leftover-slot rotation per queue (persistent across cycles), like
+     * _agentRotation: the key is every campaign on the queue, eligible or
+     * not, so eligibility changing from cycle to cycle does not reset the turn.
+     * Rotación de slots sobrantes por cola (persistente entre ciclos), como
+     * _agentRotation: la clave son todas las campañas de la cola, elegibles
+     * o no, para que los cambios de elegibilidad no reinicien el turno. */
+    private $_queueSlotRotation = array();  // [queue => ['key'=>'ids','campaigns'=>[...],'index'=>N]]
 
     public function inicioPostDemonio($infoConfig, &$oMainLog)
     {
@@ -667,7 +677,7 @@ PETICION_CAMPANIAS_ENTRANTES;
             $this->_campaignIntentions = array();
             $this->_campaignMaxCanales = array();
             $this->_campaignRawMaxCanales = array();
-            $this->_predictiveSlotsUsed = array();
+            $this->_predictiveBoostShare = array();
 
             foreach ($listaCampanias['outgoing'] as $campaignData) {
                 // Store max_canales for this campaign / Guardar max_canales para esta campaña
@@ -745,20 +755,21 @@ PETICION_CAMPANIAS_ENTRANTES;
             }
 
             // ============================================================
+            // Compute the predictive boost share per queue, before any
+            // campaign is processed, so the split is fair.
+            // Calcular la cuota de impulso predictivo por cola, antes de
+            // procesar cualquier campaña, para que el reparto sea justo.
+            // ============================================================
+            $this->_computePredictiveShares($listaCampanias['outgoing']);
+
+            // ============================================================
             // PASS 2: Process campaigns with allocated agents
             // PASO 2: Procesar campañas con agentes asignados
             // ============================================================
             foreach ($listaCampanias['outgoing'] as $tuplaCampania) {
-                /* Se debe crear el predictor para cada campaña porque la
-                 * generación de llamadas toma tiempo debido a las consultas a
-                 * la base de datos, y para cuando pasa a la siguiente campaña
-                 * que usa esa cola, la información podría estar obsoleta.
-                 * The predictor must be created for each campaign because call
-                 * generation takes time due to database queries, and by the
-                 * time it moves to the next campaign using that queue, the
-                 * information may be obsolete. */
-                $oPredictor = new Predictor($this->_ami, $this->_log);
-                $this->_processCampaignWithAllocation($tuplaCampania, $oPredictor);
+                // The predictive shares were computed before this loop.
+                // Las cuotas predictivas ya se calcularon antes de este bucle.
+                $this->_processCampaignWithAllocation($tuplaCampania);
 
                 /* Debido a las consultas a la base de datos realizadas para
                  * generar las llamadas a la campaña, es posible que se acumulen
@@ -957,14 +968,243 @@ PETICION_CAMPANIAS_ENTRANTES;
     }
 
     /**
+     * Split a queue's predictive slots between the campaigns sharing it, in
+     * proportion to the agents rotation gave each (the weights), capped by
+     * each campaign's own prediction (the caps), with rounding leftovers
+     * rotating across calls. The rotation key is every campaign on the queue
+     * ($queueCampaigns), eligible or not, so eligibility changing from cycle
+     * to cycle does not reset the turn.
+     *
+     * Repartir los slots predictivos de una cola entre las campañas que la
+     * comparten, en proporción a los agentes que la rotación dio a cada una
+     * (los pesos), limitado por la predicción propia de cada campaña (los
+     * topes), con los restos del redondeo rotando entre llamadas. La clave
+     * de rotación son todas las campañas de la cola ($queueCampaigns),
+     * elegibles o no, para que los cambios de elegibilidad no reinicien el
+     * turno.
+     *
+     * @param int $iSlots Total slots to hand out on this queue
+     * @param array $weights [campaign_id => allocated idle agents], eligible only
+     * @param array $caps [campaign_id => max slots its own prediction allows]
+     * @param array $queueCampaigns Every outgoing campaign id on this queue
+     * @param array &$rotation Per-queue rotation state (key/campaigns/index)
+     * @return array [campaign_id => int], one entry per key of $weights
+     */
+    private function _splitPredictiveSlots($iSlots, $weights, $caps, $queueCampaigns, &$rotation)
+    {
+        $shares = array();
+        foreach ($weights as $id => $w) $shares[$id] = 0;
+        if ($iSlots <= 0 || count($weights) <= 0) return $shares;
+
+        // Never hand out more than the caps allow between them.
+        $iSlots = min($iSlots, array_sum($caps));
+
+        // Rotation over every campaign on the queue, eligible or not.
+        $campaigns = array_values(array_unique(array_merge(
+            is_array($queueCampaigns) ? $queueCampaigns : array(),
+            array_keys($weights))));
+        sort($campaigns);
+        $campaignsKey = implode(',', $campaigns);
+        if (!is_array($rotation) || !isset($rotation['key']) ||
+            $rotation['key'] !== $campaignsKey) {
+            $rotation = array(
+                'key' => $campaignsKey,
+                'campaigns' => $campaigns,
+                'index' => 0,
+            );
+        }
+
+        // Phase 1: proportional floors; a campaign whose floor exceeds its
+        // own cap is fixed at the cap and the excess returns to the pool.
+        $active = array_keys($weights);
+        $remaining = $iSlots;
+        do {
+            $overflow = FALSE;
+            $W = 0;
+            foreach ($active as $id) $W += $weights[$id];
+            if ($W <= 0) break;
+            $next = array();
+            foreach ($active as $id) {
+                $floor = (int)floor($remaining * $weights[$id] / $W);
+                if ($floor > $caps[$id]) {
+                    $shares[$id] = $caps[$id];
+                    $remaining -= $caps[$id];
+                    $overflow = TRUE;
+                } else {
+                    $next[] = $id;
+                }
+            }
+            $active = $next;
+        } while ($overflow && count($active) > 0);
+
+        // Phase 2: floors for whoever is left.
+        $W = 0;
+        foreach ($active as $id) $W += $weights[$id];
+        if ($W > 0) {
+            foreach ($active as $id) {
+                $shares[$id] = (int)floor($remaining * $weights[$id] / $W);
+            }
+        }
+
+        // Phase 3: leftover slots, one at a time, in rotation order; only an
+        // eligible campaign below its cap can take one. Bounded so a queue
+        // full of capped campaigns cannot loop forever.
+        $n = count($rotation['campaigns']);
+        if ($n > 0) {
+            $leftover = $iSlots - array_sum($shares);
+            $placed = 0;
+            $tries = 0;
+            while ($placed < $leftover && $tries < 2 * $n) {
+                $id = $rotation['campaigns'][$rotation['index'] % $n];
+                $rotation['index']++;
+                $tries++;
+                if (!isset($weights[$id]) || $shares[$id] >= $caps[$id]) continue;
+                $shares[$id]++;
+                $placed++;
+            }
+        }
+
+        return $shares;
+    }
+
+    /**
+     * Compute the predictive boost share of every eligible campaign on every
+     * queue, before the campaigns are processed, and store it in
+     * $this->_predictiveBoostShare. The queue total stays what it was before
+     * (its busiest campaign's prediction minus the waiting callers, floored
+     * at 0); the split shares it out fairly.
+     *
+     * Calcular la cuota de impulso predictivo de cada campaña elegible en
+     * cada cola, antes de procesar las campañas, y guardarla en
+     * $this->_predictiveBoostShare. El total de la cola sigue siendo el de
+     * antes (la predicción de su campaña más ocupada menos los clientes en
+     * espera, sin bajar de 0); el reparto lo distribuye justamente.
+     *
+     * @param array $listaCampanias The outgoing campaigns active this cycle
+     * @return void
+     */
+    private function _computePredictiveShares($listaCampanias)
+    {
+        if (!$this->_configDB->dialer_predictivo) return;
+
+        // Group the outgoing campaigns by queue
+        // Agrupar las campañas salientes por cola
+        $campaniasPorCola = array();
+        foreach ($listaCampanias as $tupla) {
+            $campaniasPorCola[$tupla['queue']][] = $tupla;
+        }
+
+        foreach ($campaniasPorCola as $sQueue => $campaniasCola) {
+            // queueCampaigns: every outgoing campaign on this queue,
+            // eligible or not; it keys the leftover rotation.
+            // queueCampaigns: todas las campañas salientes de esta cola,
+            // elegibles o no; es la clave de la rotación de sobrantes.
+            $queueCampaigns = array();
+            foreach ($campaniasCola as $tupla) $queueCampaigns[] = $tupla['id'];
+
+            // Eligible: the rotation gave it at least one idle agent this
+            // cycle. This keeps the activation condition of the processing
+            // pass (no agents, no calls, no boost).
+            // Elegible: la rotación le dio al menos un agente libre en este
+            // ciclo. Esto mantiene la condición de activación del paso de
+            // procesamiento (sin agentes, sin llamadas, sin impulso).
+            $elegibles = array();
+            foreach ($campaniasCola as $tupla) {
+                if (isset($this->_allocatedAgents[$tupla['id']]) &&
+                    count($this->_allocatedAgents[$tupla['id']]) > 0) {
+                    $elegibles[] = $tupla;
+                }
+            }
+            if (count($elegibles) <= 0) continue;
+
+            $oPredictor = new Predictor($this->_ami, $this->_log);
+
+            // Queue info, the way Pass 1 reads it. If it cannot be had, the
+            // queue gets no shares at all.
+            // Información de la cola, como la lee el Paso 1. Si no se
+            // consigue, la cola no recibe cuotas.
+            $queueInfo = $this->_tuberia->AMIEventProcess_infoPrediccionCola(
+                $sQueue, $this->_configDB->dialer_predictivo);
+            if (is_null($queueInfo)) {
+                if ($oPredictor->examinarColas(array($sQueue))) {
+                    $queueInfo = $oPredictor->infoPrediccionCola(
+                        $sQueue, $this->_configDB->dialer_predictivo);
+                }
+            }
+            if (is_null($queueInfo)) continue;
+
+            // P_c per eligible campaign, from one snapshot of the queue.
+            // P_c por campaña elegible, desde una sola instantánea de la cola.
+            $prediccion = array();
+            foreach ($elegibles as $tupla) {
+                if ($tupla['num_completadas'] >= MIN_MUESTRAS) {
+                    // predecirNumeroLlamadas() mutates its argument, so each
+                    // campaign predicts from its own copy of the snapshot.
+                    // predecirNumeroLlamadas() modifica su argumento, así que
+                    // cada campaña predice desde su propia copia.
+                    $copiaInfoCola = $queueInfo;
+                    $resumenPrediccion = $oPredictor->predecirNumeroLlamadas($copiaInfoCola,
+                        $this->_configDB->dialer_qos,
+                        $tupla['promedio'],
+                        $this->_leerTiempoContestar($tupla['id']));
+                    $prediccion[$tupla['id']] = $resumenPrediccion['AGENTES_POR_DESOCUPAR'];
+                } else {
+                    // Below MIN_MUESTRAS there is no Erlang prediction; the
+                    // old code also got 0 agents about to free here.
+                    // Bajo MIN_MUESTRAS no hay predicción Erlang; el código
+                    // anterior también obtenía 0 agentes por desocupar aquí.
+                    $prediccion[$tupla['id']] = 0;
+                }
+            }
+
+            // The waiting callers are subtracted once per queue, before the
+            // split; each campaign's own prediction caps its share.
+            // Los clientes en espera se restan una vez por cola, antes del
+            // reparto; la predicción propia de cada campaña limita su cuota.
+            $iWaiting = $queueInfo['CLIENTES_ESPERA'];
+            $caps = array();
+            $weights = array();
+            $iT = 0;
+            foreach ($elegibles as $tupla) {
+                $id = $tupla['id'];
+                $caps[$id] = max(0, $prediccion[$id] - $iWaiting);
+                $weights[$id] = count($this->_allocatedAgents[$id]);
+                $iT = max($iT, $caps[$id]);
+            }
+
+            if (!isset($this->_queueSlotRotation[$sQueue])) {
+                $this->_queueSlotRotation[$sQueue] = array();
+            }
+            $shares = $this->_splitPredictiveSlots($iT, $weights, $caps,
+                $queueCampaigns, $this->_queueSlotRotation[$sQueue]);
+            foreach ($shares as $id => $share) {
+                $this->_predictiveBoostShare[$id] = $share;
+            }
+
+            if ($this->DEBUG) {
+                $parts = array();
+                foreach ($elegibles as $tupla) {
+                    $id = $tupla['id'];
+                    $parts[] = $id.':predicted='.$prediccion[$id].
+                        ',weight='.$weights[$id].',cap='.$caps[$id].
+                        ',share='.$this->_predictiveBoostShare[$id];
+                }
+                $listaCuotas = implode(' ', $parts);
+                $this->_log->output("DEBUG: ".__METHOD__.
+                    " predictive share: queue=$sQueue, waiting=$iWaiting, total=$iT, campaigns=[$listaCuotas] | ".
+                    "reparto predictivo: cola=$sQueue, en_espera=$iWaiting, total=$iT, campañas=[$listaCuotas]");
+            }
+        }
+    }
+
+    /**
      * Process campaign calls using pre-allocated agents.
      * Procesar llamadas de campaña usando agentes pre-asignados.
      *
      * @param array $infoCampania Campaign information
-     * @param Predictor $oPredictor Predictor instance
      * @return bool TRUE if calls were placed, FALSE otherwise
      */
-    private function _processCampaignWithAllocation($infoCampania, $oPredictor)
+    private function _processCampaignWithAllocation($infoCampania)
     {
         $campaignId = $infoCampania['id'];
         $this->_log->output("DEBUG: ".__METHOD__." === Processing campaign $campaignId ({$infoCampania['name']}) queue {$infoCampania['queue']} === | === Procesando campaña $campaignId ({$infoCampania['name']}) cola {$infoCampania['queue']} ===");
@@ -1016,61 +1256,20 @@ PETICION_CAMPANIAS_ENTRANTES;
         // Calcular cuántas llamadas colocar (limitado por agentes asignados)
         $iNumLlamadasColocar = $numAllocatedAgents;
 
-        // Predictive dialer boost: anticipate agents about to become free
-        // Impulso del marcador predictivo: anticipar agentes que se van a desocupar
-        $iPredictiveBoost = 0;
-        if ($this->_configDB->dialer_predictivo && $numAllocatedAgents > 0) {
-            $infoCola = $this->_tuberia->AMIEventProcess_infoPrediccionCola(
-                $infoCampania['queue'], $this->_configDB->dialer_predictivo);
-            if (is_null($infoCola)) {
-                if ($oPredictor->examinarColas(array($infoCampania['queue']))) {
-                    $infoCola = $oPredictor->infoPrediccionCola(
-                        $infoCampania['queue'], $this->_configDB->dialer_predictivo);
-                }
-            }
+        // Predictive dialer boost: this campaign's share of the queue's
+        // split, computed before the processing loop started.
+        // Impulso del marcador predictivo: la cuota de esta campaña del
+        // reparto de la cola, calculada antes de iniciar el bucle.
+        $iPredictiveBoost = isset($this->_predictiveBoostShare[$campaignId])
+            ? $this->_predictiveBoostShare[$campaignId] : 0;
+        $iNumLlamadasColocar += $iPredictiveBoost;
 
-            if (!is_null($infoCola)) {
-                // Apply Erlang prediction if enough completed calls for statistical confidence
-                // Aplicar predicción Erlang si hay suficientes llamadas completadas para confianza estadística
-                $resumenPrediccion = ($infoCampania['num_completadas'] >= MIN_MUESTRAS)
-                    ? $oPredictor->predecirNumeroLlamadas($infoCola,
-                        $this->_configDB->dialer_qos,
-                        $infoCampania['promedio'],
-                        $this->_leerTiempoContestar($campaignId))
-                    : $oPredictor->predecirNumeroLlamadas($infoCola);
-
-                // Calculate available predictive slots for this queue
-                // Calcular slots predictivos disponibles para esta cola
-                $sQueue = $infoCampania['queue'];
-                $predictiveAgents = $resumenPrediccion['AGENTES_POR_DESOCUPAR'];
-                $waitingClients = $resumenPrediccion['CLIENTES_ESPERA'];
-                $alreadyClaimed = isset($this->_predictiveSlotsUsed[$sQueue])
-                    ? $this->_predictiveSlotsUsed[$sQueue] : 0;
-
-                $iPredictiveBoost = $predictiveAgents - $waitingClients - $alreadyClaimed;
-                if ($iPredictiveBoost < 0) $iPredictiveBoost = 0;
-
-                // Claim these slots so other campaigns sharing this queue don't double-count
-                // Reclamar estos slots para que otras campañas en la misma cola no los cuenten doble
-                if (!isset($this->_predictiveSlotsUsed[$sQueue])) {
-                    $this->_predictiveSlotsUsed[$sQueue] = 0;
-                }
-                $this->_predictiveSlotsUsed[$sQueue] += $iPredictiveBoost;
-
-                $iNumLlamadasColocar += $iPredictiveBoost;
-
-                if ($this->DEBUG) {
-                    $this->_log->output("DEBUG: ".__METHOD__.
-                        " (campaign $campaignId queue $sQueue) ".
-                        "predictive boost: agents_about_to_free=$predictiveAgents, ".
-                        "waiting_clients=$waitingClients, already_claimed=$alreadyClaimed, ".
-                        "boost=$iPredictiveBoost, total_calls=$iNumLlamadasColocar | ".
-                        "(campaña $campaignId cola $sQueue) ".
-                        "impulso predictivo: agentes_por_desocupar=$predictiveAgents, ".
-                        "clientes_espera=$waitingClients, ya_reclamados=$alreadyClaimed, ".
-                        "impulso=$iPredictiveBoost, total_llamadas=$iNumLlamadasColocar");
-                }
-            }
+        if ($iPredictiveBoost > 0 && $this->DEBUG) {
+            $this->_log->output("DEBUG: ".__METHOD__.
+                " (campaign $campaignId queue {$infoCampania['queue']}) ".
+                "predictive boost: share=$iPredictiveBoost, total_calls=$iNumLlamadasColocar | ".
+                "(campaña $campaignId cola {$infoCampania['queue']}) ".
+                "impulso predictivo: parte=$iPredictiveBoost, total_llamadas=$iNumLlamadasColocar");
         }
 
         // ---- TWO-BUDGET CALL LIMITING ----

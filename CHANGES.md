@@ -7,6 +7,36 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.3.24
+
+- Bug fix: the RPM no longer carries icon_headphones.png or patches the dashboard ProcessesStatus applet on install or erase; both belong to issabel-system
+
+## 5.2.23
+
+- Improve: the RPM package is renamed issabel-callcenter-ce (was issabel-callcenter5), Summary "Issabel v5 Call Center Community Edition"; the build, the CI artifact and the Release asset carry the new name
+
+## 5.2.22
+
+- Improve: a patch file lives only in the newest version that ships it; `build/5.0/prune-patches.sh` deletes older copies (17 removed), `--check` lists them
+
+## 5.2.21
+
+- Bug fix: the dialer's queue refresh (every 5 minutes, on an ECCP refreshagents and on an Asterisk reload) no longer wipes the call start of every busy queue member, which made predictive campaigns stop counting busy agents as about to free until their next call
+
+## 5.2.20
+
+- Bug fix: the Calls Detail report sorts every call by when it entered the queue (datetime_entry_queue; an outbound call that never reached the queue by when it was dialled), newest first - abandoned and failed calls, which have no start time, fell below every answered call in phone-number order
+
+## 5.2.19
+
+- Bug fix: a queue's predicted slots are split between the outgoing campaigns sharing it, by the idle agents each holds, with leftovers rotating - they all went to the first campaign in list order, every cycle in which several campaigns held an idle agent; waiting callers are now subtracted once per queue
+
+## 5.2.18
+
+- Bug fix: a refused Originate records its Failure in call_progress_log - the failure notice carried no status and a raw epoch timestamp, so MariaDB rejected the row and it was lost
+- Bug fix: a database data error (SQLSTATE class 22: bad date, value too long, out of range) is logged and dropped at once, instead of retried 50 times with every dialer database write waiting about 10 minutes behind it
+- Bug fix: a call the dialer cannot place for want of an AMI connection ends as a Failure, like a refused Originate, instead of crashing AMIEventProcess and losing its agents and calls
+
 ## 5.2.17
 
 - New feature: a GitHub Actions workflow (.github/workflows/build-rpm.yml) builds the issabel-callcenter5 RPM on a major release - a VERSION bump outside the last field (5.1.16 -> 5.2.17) - through primasoft-dev/rpm-package-action on Rocky 8, uploads it as an artifact and attaches it to the v<VERSION> GitHub Release; workflow_dispatch builds any version by hand, with the rebuild counter as input

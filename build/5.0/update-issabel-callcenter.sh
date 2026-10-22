@@ -79,7 +79,7 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# An installation made by the issabel-callcenter5 RPM is managed by RPM:
+# An installation made by the issabel-callcenter-ce RPM is managed by RPM:
 # the updater would copy over files the package owns, the rpm database would
 # report a drift the next rpm -Uvh silently reverts, and the stamp it writes
 # is itself a packaged file. Refused here, before the first log line is

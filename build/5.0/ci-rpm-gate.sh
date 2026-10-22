@@ -1,5 +1,5 @@
 #!/bin/bash
-# ci-rpm-gate.sh - decide whether CI builds the issabel-callcenter5 RPM for a
+# ci-rpm-gate.sh - decide whether CI builds the issabel-callcenter-ce RPM for a
 # push, from the VERSION before and after it.
 #
 #   bash build/5.0/ci-rpm-gate.sh <old VERSION or ''> <new VERSION>

@@ -1,9 +1,9 @@
 # Spec for the Issabel Call Center community module (callcenter-issabel5),
-# packaged as issabel-callcenter5 - deliberately NOT issabel-callcenter,
-# the previous package, still offered by the Issabel 5 repos: this package
-# is neither an alternative nor an update for it, replaces nothing (no
-# Obsoletes), and rpm's own file-conflict check already stops a co-install,
-# so it needs no Conflicts either.
+# packaged as issabel-callcenter-ce (Community Edition) - deliberately NOT
+# issabel-callcenter, the previous package, still offered by the Issabel 5
+# repos: this package is neither an alternative nor an update for it,
+# replaces nothing (no Obsoletes), and rpm's own file-conflict check already
+# stops a co-install, so it needs no Conflicts either.
 #
 # Built only by build/5.0/build-rpm.sh, which defines cc_version as the
 # WHOLE VERSION string (the single source of truth; no version literal
@@ -14,7 +14,10 @@
 # /usr/share/issabel/module_installer/callcenter/ archive copy the shell
 # installer deploys, MINUS CHANGELOG_OLD.md: the frozen changelog points at
 # the repository, so the RPM does not package it (the shell installer still
-# deploys it). %post mirrors install-issabel-callcenter.sh.
+# deploys it). %post mirrors install-issabel-callcenter.sh, except for the
+# dashboard ProcessesStatus applet: that belongs to issabel-system, which
+# ships the Dialer row and its icon itself, so this package neither carries
+# icon_headphones.png nor touches the applet on install or erase.
 #
 # The module_installer directory is unversioned (callcenter, not
 # callcenter_<version>) on purpose: cc_read_version() reads
@@ -25,13 +28,13 @@
 %{!?cc_release:%{error:cc_release is not defined - build with build/5.0/build-rpm.sh}}
 %{!?cc_date:%{error:cc_date is not defined - build with build/5.0/build-rpm.sh}}
 
-Summary: Issabel v5 Call Center
-Name:    issabel-callcenter5
+Summary: Issabel v5 Call Center Community Edition
+Name:    issabel-callcenter-ce
 Version: %{cc_version}
 Release: %{cc_release}%{?dist}
 License: GPLv2+
 URL:     https://github.com/ISSABELPBX/callcenter-issabel5
-Source0: callcenter5_%{cc_version}.tgz
+Source0: issabel-callcenter-ce_%{cc_version}.tgz
 BuildArch: noarch
 
 Requires(pre): issabel-framework >= 5.0.0-1
@@ -50,11 +53,11 @@ On a box with the previous call centre package, issabel-callcenter, still
 offered by the Issabel 5 repos, installing this package refuses: remove it
 first (rpm -e issabel-callcenter, or dnf remove issabel-callcenter).
 Removing it keeps the call_center database, and installing
-issabel-callcenter5 afterwards migrates that database to a v5-compatible
+issabel-callcenter-ce afterwards migrates that database to a v5-compatible
 schema.
 
 %prep
-%setup -q -n issabel-callcenter5_%{cc_version}
+%setup -q -n issabel-callcenter-ce_%{cc_version}
 
 %install
 rm -rf $RPM_BUILD_ROOT
@@ -85,10 +88,12 @@ install -m 0755 -D setup/usr/bin/issabel-callcenter-local-dnc \
 # The module_installer archive copy: what install-issabel-callcenter.sh
 # deploys there and what cc_read_version() reads. CHANGELOG_OLD.md is not
 # packaged (see the header): nothing on a box reads it, and the changelog
-# points at the repository.
+# points at the repository. Neither is icon_headphones.png: issabel-system
+# owns the dashboard icon.
 mkdir -p $RPM_BUILD_ROOT/usr/share/issabel/module_installer/callcenter
 cp -a setup menu.xml VERSION \
     $RPM_BUILD_ROOT/usr/share/issabel/module_installer/callcenter/
+rm -f $RPM_BUILD_ROOT/usr/share/issabel/module_installer/callcenter/setup/icon_headphones.png
 
 # Log directory for the web modules (see callcenter-modules.logrotate).
 mkdir -p $RPM_BUILD_ROOT/var/log/callcenter-module
@@ -108,10 +113,10 @@ mkdir -p $RPM_BUILD_ROOT/var/log/callcenter-module
 # this package.
 if rpm -q issabel-callcenter >/dev/null 2>&1; then
     echo "Error: the previous call centre package is installed on this system ($(rpm -q issabel-callcenter))." >&2
-    echo "Remove it before installing issabel-callcenter5:" >&2
+    echo "Remove it before installing issabel-callcenter-ce:" >&2
     echo "    rpm -e issabel-callcenter        (or: dnf remove issabel-callcenter)" >&2
     echo "Removing it keeps the call_center database." >&2
-    echo "Installing issabel-callcenter5 afterwards migrates that database to a v5-compatible schema." >&2
+    echo "Installing issabel-callcenter-ce afterwards migrates that database to a v5-compatible schema." >&2
     exit 1
 fi
 exit 0
@@ -148,36 +153,8 @@ exit 0
 %post
 # Everything a file copy cannot do, mirroring
 # build/5.0/install-issabel-callcenter.sh:329-474. Idempotent, so it runs
-# unchanged on install and on upgrade.
-
-# Dashboard ProcessesStatus applet: add the Dialer service (installer
-# lines 329-368). The applet belongs to issabel-system, so this is a patch,
-# never payload.
-DASHBOARD_DIR="/var/www/html/modules/dashboard/applets/ProcessesStatus"
-DASHBOARD_INDEX="$DASHBOARD_DIR/index.php"
-if [ -f "$DASHBOARD_INDEX" ]; then
-    # icon_headphones.png belongs to issabel-system, not to this package:
-    # copy it only when it is missing, and never delete it on erase.
-    [ -f "$DASHBOARD_DIR/images/icon_headphones.png" ] || \
-        /bin/cp -f /usr/share/issabel/module_installer/callcenter/setup/icon_headphones.png \
-            "$DASHBOARD_DIR/images/"
-    if ! grep -q "'Dialer'" "$DASHBOARD_INDEX"; then
-        sed -i "/'Apache'.*=>.*'icon_www.png'/a\\            'Dialer'    =>  'icon_headphones.png'," "$DASHBOARD_INDEX"
-    fi
-    if ! grep -q "'Dialer'.*=>.*'issabeldialer'" "$DASHBOARD_INDEX"; then
-        sed -i "/'Apache'.*=>.*'httpd'/a\\            'Dialer'    =>  'issabeldialer'," "$DASHBOARD_INDEX"
-    fi
-    if ! grep -q 'dialerd.pid' "$DASHBOARD_INDEX"; then
-        sed -i '/\$arrSERVICES\["Apache"\]\["name_service"\].*=.*"Web Server"/a\
-\
-        $arrSERVICES["Dialer"]["status_service"]   = $this->_existPID_ByFile("/opt/issabel/dialer/dialerd.pid","issabeldialer");\
-        $arrSERVICES["Dialer"]["activate"]     = $this->_isActivate("issabeldialer");\
-        $arrSERVICES["Dialer"]["name_service"]     = "Issabel Call Center Service";' "$DASHBOARD_INDEX"
-    fi
-    if ! grep -q 'file_exists("/etc/systemd/system/{$ns}.service")' "$DASHBOARD_INDEX"; then
-        sed -i 's|if (file_exists("/usr/lib/systemd/system/{$ns}.service"))|if (file_exists("/etc/systemd/system/{$ns}.service"))\n                return TRUE;\n            if (file_exists("/usr/lib/systemd/system/{$ns}.service"))|' "$DASHBOARD_INDEX"
-    fi
-fi
+# unchanged on install and on upgrade. The installer's dashboard applet
+# patch (lines 335-368) is left out on purpose: see the header.
 
 # ECCP TLS certificate (installer lines 399-410): the port 20005 listener is
 # TLS-only and the dialer runs as asterisk, so it needs its own readable pair.
@@ -241,14 +218,6 @@ if [ "$1" -eq 0 ]; then
     fi
     /bin/rm -f /etc/issabel/dialer/eccp.pem /etc/issabel/dialer/eccp.key
     rmdir /etc/issabel/dialer 2>/dev/null || true
-
-    DASHBOARD_DIR="/var/www/html/modules/dashboard/applets/ProcessesStatus"
-    DASHBOARD_INDEX="$DASHBOARD_DIR/index.php"
-    if [ -f "$DASHBOARD_INDEX" ]; then
-        # The icon mapping and icon_headphones.png itself are stock (issabel-system): not ours to delete.
-        sed -i "/'Dialer'.*=>.*'issabeldialer'/d" "$DASHBOARD_INDEX"
-        sed -i '/\$arrSERVICES\["Dialer"\]/d' "$DASHBOARD_INDEX"
-    fi
 
     # rpm has removed its own files from /opt/issabel/dialer; what is left is
     # the dialer's runtime dialerd.log* and dialerd.pid, which the shell

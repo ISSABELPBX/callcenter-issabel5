@@ -1,11 +1,12 @@
 #!/bin/bash
-# build-rpm.sh - build the issabel-callcenter5 RPM from this checkout, one
+# build-rpm.sh - build the issabel-callcenter-ce RPM from this checkout, one
 # command. This is the entry point a CI job calls on a version bump.
 #
 #   bash build/5.0/build-rpm.sh
 #
-# The package name is issabel-callcenter5 on purpose: it is neither an
-# alternative nor an update for issabel-callcenter, the previous package.
+# The package name is issabel-callcenter-ce (Community Edition) on purpose:
+# it is neither an alternative nor an update for issabel-callcenter, the
+# previous package.
 # The Version is the WHOLE VERSION string (5.1.15) - the single source of
 # truth; the spec carries no version literal. The Release is a rebuild
 # counter, separate from VERSION: 1 for the first build of a version, then
@@ -68,14 +69,14 @@ mkdir -p "$TOPDIR"/BUILD "$TOPDIR"/SOURCES "$TOPDIR"/SPECS "$TOPDIR"/RPMS "$TOPD
 # deploys it. Nothing else from the checkout reaches the tarball. The
 # staging directory and the tarball carry the full VERSION.
 STAGE_PARENT="$TOPDIR/stage"
-STAGE="$STAGE_PARENT/issabel-callcenter5_${V}"
+STAGE="$STAGE_PARENT/issabel-callcenter-ce_${V}"
 /bin/rm -rf "$STAGE_PARENT"
 mkdir -p "$STAGE"
 /bin/cp -a "$REPO_ROOT/modules" "$REPO_ROOT/setup" "$REPO_ROOT/menu.xml" \
           "$REPO_ROOT/VERSION" "$STAGE/"
 
-TARBALL="$TOPDIR/SOURCES/callcenter5_${V}.tgz"
-tar -C "$STAGE_PARENT" -czf "$TARBALL" "issabel-callcenter5_${V}"
+TARBALL="$TOPDIR/SOURCES/issabel-callcenter-ce_${V}.tgz"
+tar -C "$STAGE_PARENT" -czf "$TARBALL" "issabel-callcenter-ce_${V}"
 
 rpmbuild -bb \
     --define "_topdir $TOPDIR" \
@@ -85,5 +86,5 @@ rpmbuild -bb \
     "$SCRIPT_DIR/issabel-callcenter.spec"
 
 # Exactly one noarch RPM, named after the version just built.
-RPM_BUILT="$(ls "$TOPDIR"/RPMS/noarch/issabel-callcenter5-${cc_version}-${cc_release}*.noarch.rpm)"
+RPM_BUILT="$(ls "$TOPDIR"/RPMS/noarch/issabel-callcenter-ce-${cc_version}-${cc_release}*.noarch.rpm)"
 echo "RPM: $RPM_BUILT"

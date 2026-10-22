@@ -120,7 +120,7 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# An installation made by the issabel-callcenter5 RPM is managed by RPM:
+# An installation made by the issabel-callcenter-ce RPM is managed by RPM:
 # this script must not clone, copy over or remove files the package owns.
 # Refused here, before the first effect (the GitHub clone below, or the
 # in-place update's exec of the updater).

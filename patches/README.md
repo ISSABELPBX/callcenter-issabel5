@@ -30,6 +30,15 @@ its `files/` tree over the installation as-is.
   Anything else (docs, `build/`) makes the updater refuse the whole plan.
 - Each file under `files/` is the file **as of that version** — bytes taken
   from the release, not from a later tree.
+- **A file lives only in the newest version that ships it.** When a new
+  version changes a file an older version already carries, the older copy is
+  deleted: every box that would apply it also applies the newer one, which
+  lands last and decides what the box ends with. A version left with no file
+  keeps its directory and its `update.sh`. Run
+  `bash build/5.0/prune-patches.sh` after filling a new directory; `--check`
+  lists any older copy, changes nothing, and exits 1 when one is left. An
+  older `update.sh` may still say its file is "a plain copy under files/":
+  the copy has moved to the later version, and the comment is history.
 
 ## Filling a directory for a new version
 
@@ -38,6 +47,7 @@ its `files/` tree over the installation as-is.
 Copy every changed path that ships to the box (see the mapping above) into
 `files/` at the same relative path, with its content at the new version.
 Deletions cannot be expressed by a copy: remove deleted files in `update.sh`.
+Then prune the older copies: `bash build/5.0/prune-patches.sh`.
 
 One exception: 5.1.2 starts from the 5.1.1 RC release (`47a702b`), not from
 the 5.1.1 bump (`54ec605`) — work went on under 5.1.1 after the bump, and the
@@ -63,6 +73,9 @@ Contract:
 - Run by the updater with the repository root as working directory, and with
   `CC_PATCH_VERSION` (the version being applied), `CC_PATCH_DIR` (its
   directory) and `CC_REPO_ROOT` in the environment.
+- Must not read its own `files/`: a later version may take a file from it
+  (see the layout above). Ship what `update.sh` needs from the checkout
+  (`$CC_REPO_ROOT`) instead.
 - Must be **idempotent**: after a version completes, the installed stamp is
   written, and a failed later version leaves a re-run to apply the remaining
   ones again — so a re-applied `update.sh` must be harmless.
@@ -91,3 +104,8 @@ The updater writes the deployed stamp (`/usr/share/issabel/module_installer/
 callcenter/VERSION`) after each version completes, so an interrupted update
 resumes at the first version that did not finish. A failed `update.sh` is
 therefore safe to re-run after fixing it.
+
+Because a file ships only in its newest version, an update stopped half way
+can leave a box whose files belong to different versions until the re-run
+finishes. The dialer is restarted only at the end, so it never runs that
+mixture; the web modules may, until the re-run.
