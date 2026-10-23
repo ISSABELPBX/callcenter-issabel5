@@ -29,7 +29,7 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Urgency**: Medium
 * **Date Added**: 2026-03-06 (Change #36)
 * **Location**: `QueueShadow.class.php`, `Predictor.class.php`
-* **Description**: Even in predictive mode, counting RINGING agents as "free" may cause over-placement. Analysis needed to determine if this behavior is optimal.
+* **Description**: Even in predictive mode, counting RINGING agents as "free" may cause over-placement. Analysis needed to determine if this behavior is optimal. Since 5.3.25 a member on a live call (LinkStart, or the Predictor's bridged-channel scan, with a busy or ringing device state) counts busy and about to free. A member that is only ringing still counts free, and that question stays open.
 * **Status**: Untouched
 
 ### Attended-Transfer Hold Has No Orphan Check
