@@ -7,6 +7,10 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.3.25
+
+- Bug fix: a queue member on a live call counts as busy and about to free even when Asterisk has left its device state at RINGING after the answer - predictive campaigns had counted that agent free and predicted no call for it; a member that is only ringing still counts free, and one whose call has ended (device NOT_INUSE) is free even if its AgentComplete was lost
+
 ## 5.3.24
 
 - Bug fix: the RPM no longer carries icon_headphones.png or patches the dashboard ProcessesStatus applet on install or erase; both belong to issabel-system
