@@ -7,6 +7,13 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.3.28
+
+- Bug fix: the agent console's shift counters stop at the shift end and read 00:00:00 before the shift starts, instead of counting on outside the applied shift
+- Bug fix: a break, hold or call no longer resets the agent console's shift counters to the whole day's totals - the agent's shift filter is kept in the session, also after a reload
+- Bug fix: the shift's break and hold totals count only the part inside the shift, including a break or hold still running
+- Bug fix: an overnight shift (From after To) shows the shift in progress, not last night's
+
 ## 5.3.27
 
 - Bug fix: predictive mode no longer counts a queue member whose phone is ringing as a free agent - a campaign could place an extra call for a callback agent while a queue call or any other call was ringing them, though the queue will not ring a ringing member and nothing subtracted the call already ringing them
