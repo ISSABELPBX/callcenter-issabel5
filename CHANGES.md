@@ -7,6 +7,11 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.3.26
+
+- Bug fix: a renamed agent no longer keeps its old name in the dialer until a restart - the agent-list refresh copies the database name onto a known agent, so QueueAdd, queue_log and the queue member list follow the rename
+- Improve: the Agents and Callback Extensions pages ask the dialer to re-read its agent list right after saving an agent, instead of waiting for its 5-minute timer
+
 ## 5.3.25
 
 - Bug fix: a queue member on a live call counts as busy and about to free even when Asterisk has left its device state at RINGING after the answer - predictive campaigns had counted that agent free and predicted no call for it; a member that is only ringing still counts free, and one whose call has ended (device NOT_INUSE) is free even if its AgentComplete was lost

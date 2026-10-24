@@ -62,6 +62,15 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Open decision**: The predicate above includes never-originated rows, so `Retries Left` is a superset of `Pending Calls` (on the client box campaign 9 showed 13578 pending against 15039 retries-left). Confirm whether that overlap is wanted, or whether never-originated rows should be excluded so the two columns are disjoint -- excluding them breaks the "reaches 0 when the dialer finishes it" property, so the overlap is probably the right call.
 * **Status**: Untouched
 
+### Agent-List Refresh Drops Same-ID Estatus Change
+
+* **Type**: Bug
+* **Urgency**: Medium
+* **Date Added**: 2026-10-24
+* **Location**: `AMIEventProcess.class.php` (`_nuevaListaAgentes`)
+* **Description**: The dialer's agent-list refresh (the SQLWorker's 5-minute timer and the ECCP `refreshagents` request) copies a refreshed row onto a known agent only when its database id changed and it is logged out, or — since 5.3.26 — when its name changed. A same-id `estatus` change is still dropped: an agent deactivated in the GUI (the soft `UPDATE agent SET estatus='I'`, `Agentes.class.php` `deleteAgent()`) stays active-flagged in the dialer's in-memory cache until it restarts, so the Agents page's save-time `refreshagents` notify has no effect on deactivation. Same branch chain as the rename fix, which deliberately does not touch `estatus`. Fix: copy `$tupla['estatus']` onto a known agent in the same refresh, and cover it with a test.
+* **Status**: Untouched
+
 ### Hold Timeout Countdown
 
 * **Type**: Feature

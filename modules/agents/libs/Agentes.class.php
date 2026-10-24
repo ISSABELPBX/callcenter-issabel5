@@ -29,6 +29,7 @@ if (file_exists("/var/lib/asterisk/agi-bin/phpagi-asmanager.php")) {
 	die('Unable to find phpagi-asmanager.php');
 }
 include_once("libs/paloSantoDB.class.php");
+require_once "modules/agent_console/libs/issabel2.lib.php";
 
 class Agentes
 {
@@ -193,7 +194,8 @@ class Agentes
             $this->_DB->genQuery("ROLLBACK");
         }
         $this->_DB->genQuery("SET AUTOCOMMIT = 1");
-        return $resp; 
+        if ($resp) $this->_refreshDialerAgentList();
+        return $resp;
     }
 
     /**
@@ -354,6 +356,7 @@ class Agentes
             $this->_DB->genQuery("COMMIT");
             $this->_DB->genQuery("SET AUTOCOMMIT = 1");
 
+            $this->_refreshDialerAgentList();
             return $this->_reloadAsterisk();
         } else {
             $this->_DB->genQuery("ROLLBACK");
@@ -390,6 +393,7 @@ class Agentes
             $this->_DB->genQuery("ROLLBACK");
         }
         $this->_DB->genQuery("SET AUTOCOMMIT = 1");
+        if ($resp) $this->_refreshDialerAgentList();
 
         return $resp;
     }
@@ -688,6 +692,45 @@ class Agentes
             $strReload = $astman->Command("module reload $module");
             $astman->disconnect();
             return TRUE;
+        }
+    }
+
+    /* Pedir al dialer que relea su lista de agentes ahora mismo, en vez de
+     * esperar su temporizador de 5 minutos. Falla en silencio: el guardado
+     * ya ocurrió y el temporizador del dialer converge de todos modos.
+     * EN: Ask the dialer to re-read its agent list right now, instead of
+     * waiting for its 5-minute timer. Fails quietly: the save already
+     * happened and the dialer's timer converges anyway. */
+    private function _refreshDialerAgentList()
+    {
+        try {
+            require_once 'modules/agent_console/libs/ECCP.class.php';
+            $sUsernameECCP = 'agentconsole';
+            $sPasswordECCP = 'agentconsole';
+            $md5_passwd = $this->_DB->getFirstRowQuery(
+                'SELECT md5_password FROM eccp_authorized_clients WHERE username = ?',
+                TRUE, array($sUsernameECCP));
+            if (is_array($md5_passwd)) {
+                if (count($md5_passwd) <= 0) {
+                    $this->_DB->genQuery(
+                        'INSERT INTO eccp_authorized_clients (username, md5_password) VALUES(?, md5(?))',
+                        array($sUsernameECCP, $sPasswordECCP));
+                } else {
+                    $sPasswordECCP = $md5_passwd['md5_password'];
+                }
+            }
+            $oECCP = new ECCP();
+            $cr = $oECCP->connect('localhost', $sUsernameECCP, $sPasswordECCP);
+            if (isset($cr->failure)) {
+                _cc_debug('ECCP refreshagents refused: '.(string)$cr->failure->message, 'agents');
+                return FALSE;
+            }
+            $oECCP->refreshagents();
+            $oECCP->disconnect();
+            return TRUE;
+        } catch (Exception $e) {
+            _cc_debug('ECCP refreshagents failed: '.get_class($e).': '.$e->getMessage(), 'agents');
+            return FALSE;
         }
     }
 
