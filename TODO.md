@@ -23,15 +23,6 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 
 ## Medium
 
-### RINGING-as-Free Analysis
-
-* **Type**: Investigation
-* **Urgency**: Medium
-* **Date Added**: 2026-03-06 (Change #36)
-* **Location**: `QueueShadow.class.php`, `Predictor.class.php`
-* **Description**: Even in predictive mode, counting RINGING agents as "free" may cause over-placement. Analysis needed to determine if this behavior is optimal. Since 5.3.25 a member on a live call (LinkStart, or the Predictor's bridged-channel scan, with a busy or ringing device state) counts busy and about to free. A member that is only ringing still counts free, and that question stays open.
-* **Status**: Untouched
-
 ### Attended-Transfer Hold Has No Orphan Check
 
 * **Type**: Bug
@@ -84,6 +75,15 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 ---
 
 ## Low
+
+### Exact Predictive Count for Ringing Callback Agents
+
+* **Type**: Improvement
+* **Urgency**: Low
+* **Date Added**: 2026-10-24
+* **Location**: `QueueShadow.class.php` (`msg_AgentCalled`), `CampaignProcess.class.php` (boost and eligibility)
+* **Description**: Per review cycle the dialer places, for one campaign, `N = F + max(0, P - W) - D`, and `N = 0` when `F = 0` - where F is the idle agents allocated to the campaign (`AGENTES_LIBRES_LISTA`), P the busy agents the Erlang model expects to free within the answer window (`AGENTES_POR_DESOCUPAR`), W the callers waiting in the queue (`CLIENTES_ESPERA`; a caller stays counted until bridged, so a caller whose call is ringing an agent is in W), D the calls originated and not yet answered (pending originate), and R the queue members being rung with a waiting caller right now. The right count is `F + P - (W - R) - D`: each of the R ringing members is already matched to one of the W waiting callers. Since 5.3.27 a ringing member is not in F, but its caller is still subtracted inside W, so with busy agents about to free (P > 0) the dialer places up to R calls too few, and with F = 0 the eligibility gate places none at all even when P > 0 (before 5.3.27 a ringing member counted as idle kept the campaign eligible - two errors cancelling). Worked example: F = 1, R = 2, W = 2, P = 2 - the right count is 3, pre-5.3.27 gave 3 by cancellation, 5.3.27 gives 1. The exact version: `N = F + max(0, P - (W - Rq)) - D`, with the gate open while the campaign's queue has Rq > 0, where Rq counts members the QUEUE is ringing with a waiting caller (from AgentCalled until AgentConnect, AgentRingNoAnswer or the caller leaving, per queue; `QueueShadow::msg_AgentCalled` is a stub today) - not device RINGING, because a phone ringing with a personal call serves no waiting caller. Agent-type members never read RINGING (app_agent_pool publishes only UNAVAILABLE, NOT_INUSE and INUSE), so R is always 0 for them and their count is unchanged; a callback agent with an auto-answer phone rings for milliseconds against the 3 s cycle, so R is almost always 0 there too. Only callback agents who answer by hand are affected, and the error is on the safe side: too few calls, never abandoned ones.
+* **Status**: Untouched
 
 ### Schedule Call to Different Campaign
 
