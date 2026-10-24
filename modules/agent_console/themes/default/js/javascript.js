@@ -52,10 +52,14 @@ var timer = null;
 // Objeto EventSource, si está soportado por el navegador
 var evtSource = null;
 
-// Shift-based time tracking variables
-var shiftLoginTime = null;  // Date object for login timer
-var shiftBreakTime = null;  // Date object for break timer
-var shiftHoldTime = null;   // Date object for hold timer
+// Shift-based time tracking. The server owns the window: it sends the
+// totals (origShift*, seconds) together with the window's two ends
+// (shiftStartTs/shiftEndTs, ms). Until the first server value arrives the
+// bounds are null and the counters run unbounded, as they always did. The
+// browser never re-derives the window's day rule.
+var shiftStartTs = null;      // ms epoch of the window start, from the server
+var shiftEndTs = null;        // ms epoch of the window end, from the server
+var lastShiftFetchTs = null;  // ms epoch of the last shift-value fetch
 var origShiftLogin = 0;     // Original seconds from server
 var origShiftBreak = 0;
 var origShiftHold = 0;
@@ -373,16 +377,19 @@ function initialize_client_state(nuevoEstado)
 		$('#btn_transfer').button('disable');
 	}
 
-	// Initialize shift stat timers
+	// Initialize shift stat timers from the server's initial state: the
+	// totals and the window's two ends travel together
 	origShiftLogin = nuevoEstado.shift_login_time || 0;
 	origShiftBreak = nuevoEstado.shift_break_time || 0;
 	origShiftHold = nuevoEstado.shift_hold_time || 0;
 	isHoldPause = nuevoEstado.is_hold_pause || false;
-
-	var now = new Date();
-	shiftLoginTime = new Date(now.getTime() - origShiftLogin * 1000);
-	shiftBreakTime = new Date(now.getTime() - origShiftBreak * 1000);
-	shiftHoldTime = new Date(now.getTime() - origShiftHold * 1000);
+	if (nuevoEstado.shift_start_epoch !== undefined) {
+		shiftStartTs = nuevoEstado.shift_start_epoch * 1000;
+	}
+	if (nuevoEstado.shift_end_epoch !== undefined) {
+		shiftEndTs = nuevoEstado.shift_end_epoch * 1000;
+	}
+	lastShiftFetchTs = new Date().getTime();
 
 	// Initialize shift filter UI
 	loadShiftPreferences();
@@ -445,35 +452,40 @@ function actualizar_cronometro()
 		$('#issabel-callcenter-cronometro').text(tiempo[2] + ':' + tiempo[1] + ':' + tiempo[0]);
 	}
 
-	// Update shift stat timers
+	// Update shift stat timers: the server value plus only the wall time
+	// that falls inside the window since the fetch
 	// Login timer always ticks when logged in
-	if (shiftLoginTime != null) {
-		formatoShiftTimer('#shift-stat-login', shiftLoginTime);
-	}
+	formatoShiftTimer('#shift-stat-login', origShiftLogin);
 
 	// Break timer ticks only when on break (and not hold-type)
-	if (shiftBreakTime != null && estadoCliente.break_id != null && !isHoldPause) {
-		formatoShiftTimer('#shift-stat-break', shiftBreakTime);
+	if (estadoCliente.break_id != null && !isHoldPause) {
+		formatoShiftTimer('#shift-stat-break', origShiftBreak);
 	}
 
 	// Hold timer ticks only when on hold
-	if (shiftHoldTime != null && (estadoCliente.onhold || isHoldPause)) {
-		formatoShiftTimer('#shift-stat-hold', shiftHoldTime);
+	if (estadoCliente.onhold || isHoldPause) {
+		formatoShiftTimer('#shift-stat-hold', origShiftHold);
 	}
 
 	timer = setTimeout(actualizar_cronometro, 500);
 }
 
-// Format shift timer display
-function formatoShiftTimer(selector, fechaInicio) {
-	var fechaDiff = new Date();
-	var msec = fechaDiff.getTime() - fechaInicio.getTime();
+// Render a shift stat: the server-reported seconds plus only the wall time
+// between the fetch and now that falls inside the window. Past the window
+// end it freezes at the boundary value; before the start it reads
+// 00:00:00; with no window known yet it counts plain wall time, as before.
+function formatoShiftTimer(selector, origSeconds) {
+	var nowMs = Date.now();
+	var fetchMs = (lastShiftFetchTs == null) ? nowMs : lastShiftFetchTs;
+	var clampMs = function (ms) {
+		if (shiftStartTs == null || shiftEndTs == null) return ms;
+		return Math.min(Math.max(ms, shiftStartTs), shiftEndTs);
+	};
+	var sec = origSeconds + Math.max(0, Math.floor((clampMs(nowMs) - clampMs(fetchMs)) / 1000));
 	var tiempo = [0, 0, 0];
-	tiempo[0] = (msec - (msec % 1000)) / 1000;
-	tiempo[1] = (tiempo[0] - (tiempo[0] % 60)) / 60;
-	tiempo[0] %= 60;
-	tiempo[2] = (tiempo[1] - (tiempo[1] % 60)) / 60;
-	tiempo[1] %= 60;
+	tiempo[0] = sec % 60;
+	tiempo[1] = Math.floor(sec / 60) % 60;
+	tiempo[2] = Math.floor(sec / 3600);
 	for (var i = 0; i < 3; i++) {
 		if (tiempo[i] <= 9) tiempo[i] = "0" + tiempo[i];
 	}
@@ -949,18 +961,21 @@ function do_updateShiftTimes()
     function (respuesta) {
         verificar_error_session(respuesta);
         if (respuesta.shift_login_time !== undefined) {
-            var now = new Date();
             origShiftLogin = respuesta.shift_login_time;
             origShiftBreak = respuesta.shift_break_time;
             origShiftHold = respuesta.shift_hold_time;
-            shiftLoginTime = new Date(now.getTime() - origShiftLogin * 1000);
-            shiftBreakTime = new Date(now.getTime() - origShiftBreak * 1000);
-            shiftHoldTime = new Date(now.getTime() - origShiftHold * 1000);
             isHoldPause = respuesta.is_hold_pause || false;
+            if (respuesta.shift_start_epoch !== undefined) {
+                shiftStartTs = respuesta.shift_start_epoch * 1000;
+            }
+            if (respuesta.shift_end_epoch !== undefined) {
+                shiftEndTs = respuesta.shift_end_epoch * 1000;
+            }
+            lastShiftFetchTs = new Date().getTime();
             // Update display immediately
-            formatoShiftTimer('#shift-stat-login', shiftLoginTime);
-            formatoShiftTimer('#shift-stat-break', shiftBreakTime);
-            formatoShiftTimer('#shift-stat-hold', shiftHoldTime);
+            formatoShiftTimer('#shift-stat-login', origShiftLogin);
+            formatoShiftTimer('#shift-stat-break', origShiftBreak);
+            formatoShiftTimer('#shift-stat-hold', origShiftHold);
         }
     }, 'json');
 }
@@ -1024,22 +1039,34 @@ function manejarRespuestaStatus(respuesta)
 			}
 		}
 
-		// Update shift times from server response
-		var fechaAhora = new Date();
+		// Update shift times from server response: the totals and the
+		// window's two ends travel together on every event
+		var sawShiftValue = false;
 		if (respuesta[i].shift_login_time !== undefined) {
 			origShiftLogin = respuesta[i].shift_login_time;
-			shiftLoginTime = new Date(fechaAhora.getTime() - origShiftLogin * 1000);
+			sawShiftValue = true;
 		}
 		if (respuesta[i].shift_break_time !== undefined) {
 			origShiftBreak = respuesta[i].shift_break_time;
-			shiftBreakTime = new Date(fechaAhora.getTime() - origShiftBreak * 1000);
+			sawShiftValue = true;
 		}
 		if (respuesta[i].shift_hold_time !== undefined) {
 			origShiftHold = respuesta[i].shift_hold_time;
-			shiftHoldTime = new Date(fechaAhora.getTime() - origShiftHold * 1000);
+			sawShiftValue = true;
 		}
 		if (respuesta[i].is_hold_pause !== undefined) {
 			isHoldPause = respuesta[i].is_hold_pause;
+		}
+		if (respuesta[i].shift_start_epoch !== undefined) {
+			shiftStartTs = respuesta[i].shift_start_epoch * 1000;
+			sawShiftValue = true;
+		}
+		if (respuesta[i].shift_end_epoch !== undefined) {
+			shiftEndTs = respuesta[i].shift_end_epoch * 1000;
+			sawShiftValue = true;
+		}
+		if (sawShiftValue) {
+			lastShiftFetchTs = new Date().getTime();
 		}
 
 		switch (respuesta[i].event) {
