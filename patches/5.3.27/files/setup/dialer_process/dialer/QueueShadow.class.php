@@ -338,10 +338,16 @@ class QueueShadow
         return $t;
     }
 
-    // A member on a live call (LinkStart plus a busy or ringing device state) is busy.
-    // A member that is only ringing still counts free in predictive mode (G8); the open part stays in TODO.md.
-    // Un miembro en llamada viva (LinkStart más un estado de dispositivo ocupado o sonando) está ocupado.
-    // Un miembro que solo está sonando sigue contándose libre en modo predictivo (G8); lo abierto queda en TODO.md.
+    // A member on a live call (LinkStart plus a busy or ringing device state) stays busy (5.3.25).
+    // A member whose device is ringing is being offered a call (a queue delivery or any other
+    // call): the queue will not ring it again under ringinuse=no, and no counter subtracts the
+    // call already ringing it, so it is not a free agent in any mode; it is free again once its
+    // device reads NOT_INUSE.
+    // Un miembro en llamada viva (LinkStart más un estado de dispositivo ocupado o sonando) sigue ocupado (5.3.25).
+    // Un miembro cuyo dispositivo está sonando está recibiendo una oferta de llamada (una entrega
+    // de cola o cualquier otra llamada): la cola no lo volverá a llamar con ringinuse=no y ningún
+    // contador resta la llamada que ya lo está haciendo sonar, así que no es un agente libre en
+    // ningún modo; queda libre cuando su dispositivo marca NOT_INUSE.
     function infoPrediccionCola($queue, $predictive = true)
     {
         if (!isset($this->_queues[$queue])) {
@@ -398,9 +404,7 @@ class QueueShadow
 
             // Miembro definitivamente libre
             // Member definitely free
-            $freeStatuses = $predictive
-                ? array(AST_DEVICE_NOT_INUSE, AST_DEVICE_RINGING)
-                : array(AST_DEVICE_NOT_INUSE);
+            $freeStatuses = array(AST_DEVICE_NOT_INUSE);
             if (!$onLiveCall && in_array($miembro['Status'], $freeStatuses)) {
                 $iNumLlamadasColocar['AGENTES_LIBRES']++;
                 $iNumLlamadasColocar['AGENTES_LIBRES_LISTA'][] = $miembro_key;
