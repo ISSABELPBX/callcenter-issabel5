@@ -1702,6 +1702,17 @@ class AMIEventProcess extends TuberiaProcess
                     $this->_log->output("INFO: agente $sAgente cambió de ID de base de datos pero está ".
                         $a->estado_consola.' | EN: agent '.$sAgente.' changed database ID but is '.$a->estado_consola);
                 }
+            } elseif ($a->name != $tupla['name']) {
+                // Agente renombrado en la base de datos sin cambiar de ID: el
+                // nombre refrescado se descartaba y el dialer seguía ofreciendo
+                // el viejo en QueueAdd hasta el próximo reinicio.
+                // Agent renamed in the database keeping its ID: the refreshed
+                // name used to be dropped here, so the dialer kept offering
+                // the old one in QueueAdd until the next restart.
+                $this->_log->output("INFO: agente $sAgente cambió de nombre de '".
+                    $a->name."' a '".$tupla['name']."' | EN: agent $sAgente renamed from '".
+                    $a->name."' to '".$tupla['name']."'");
+                $a->name = $tupla['name'];
             }
 
             // Iniciar pertenencia de agentes dinámicos
