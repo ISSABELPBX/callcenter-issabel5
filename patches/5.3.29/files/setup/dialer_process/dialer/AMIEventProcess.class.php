@@ -1715,6 +1715,25 @@ class AMIEventProcess extends TuberiaProcess
                 $a->name = $tupla['name'];
             }
 
+            // Agente activado o desactivado en la base de datos sin cambiar
+            // de ID (la desactivación de las páginas de agentes es un UPDATE
+            // suave): el estatus refrescado se descartaba y la caché seguía
+            // reportando el agente como activo hasta el próximo reinicio.
+            // Agent activated or deactivated in the database keeping its ID
+            // (the agent pages' deactivation is a soft UPDATE): the refreshed
+            // status used to be dropped here, so the cache kept reporting
+            // the agent active until the next dialer restart.
+            if ($a->id_agent == $tupla['id'] &&
+                $a->estatus != ($tupla['estatus'] == 'A')) {
+                $this->_log->output("INFO: agente $sAgente cambió de estatus de ".
+                    ($a->estatus ? 'ACTIVO' : 'INACTIVO')." a ".
+                    (($tupla['estatus'] == 'A') ? 'ACTIVO' : 'INACTIVO').
+                    " | EN: agent $sAgente changed status from ".
+                    ($a->estatus ? 'ACTIVE' : 'INACTIVE')." to ".
+                    (($tupla['estatus'] == 'A') ? 'ACTIVE' : 'INACTIVE'));
+                $a->estatus = ($tupla['estatus'] == 'A');
+            }
+
             // Iniciar pertenencia de agentes dinámicos
             // Initialize dynamic agent membership
             $dyn = array();

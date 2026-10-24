@@ -7,6 +7,10 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.3.29
+
+- Bug fix: a deactivated agent no longer shows as active in the dialer's agent list until a restart - the agent-list refresh copies a same-id status change onto the known agent
+
 ## 5.3.28
 
 - Bug fix: the agent console's shift counters stop at the shift end and read 00:00:00 before the shift starts, instead of counting on outside the applied shift
