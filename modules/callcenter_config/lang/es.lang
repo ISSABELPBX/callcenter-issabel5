@@ -39,6 +39,7 @@ $arrLangModule = array(
     "Start" => "Iniciar",
     "Stop" => "Detener",
     "Internal DB error" => "Error interno de DB",
+    "Could not read the current settings" => "No se pudo leer la configuración actual",
     "Dialer Status" => "Estado del Dialer",
     "Current Status" => "Estado actual",
     "Enable overcommit of outgoing calls" => "Permitir sobre-colocar llamadas salientes",

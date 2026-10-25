@@ -488,13 +488,11 @@ SQL_UPDATE_CAMPAIGN;
         // La campaña debe existir y no estar Activa para poder borrarla: una
         // campaña Activa puede tener llamadas en curso coordinadas con el
         // dialer, y borrarla en caliente genera acciones envenenadas en la
-        // cola del SQLWorkerProcess (ver TODO: Campaign Deletion Not
-        // Coordinated With Dialer).
+        // cola del SQLWorkerProcess (ver Change #58 en CHANGES_PRE.md).
         // EN: The campaign must exist and not be Active to be deletable: an
         // Active campaign may have in-flight calls coordinated with the
         // dialer, and deleting it hot generates poisoned actions in the
-        // SQLWorkerProcess queue (see TODO: Campaign Deletion Not
-        // Coordinated With Dialer).
+        // SQLWorkerProcess queue (see Change #58 in CHANGES_PRE.md).
         $tupla = $this->_DB->getFirstRowQuery(
             'SELECT estatus FROM campaign WHERE id = ?', TRUE, array($idCampaign));
         if (!is_array($tupla) || count($tupla) == 0) {

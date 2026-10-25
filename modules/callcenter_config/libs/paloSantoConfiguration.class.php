@@ -35,11 +35,10 @@ class paloSantoConfiguration {
             $dsn = (string)$pDB;
             $this->_DB = new paloDB($dsn);
 
-            if (!$this->_DB->connStatus) {
+            if ($this->_DB->connStatus) {
+                // paloDB pone connStatus en TRUE cuando falla la conexión
+                // EN: paloDB sets connStatus to TRUE when the connection fails
                 $this->errMsg = $this->_DB->errMsg;
-                // debo llenar alguna variable de error
-            } else {
-                // debo llenar alguna variable de error
             }
         }
     }
@@ -65,11 +64,15 @@ class paloSantoConfiguration {
             );
             foreach ($listaConf as $tupla) $t[$tupla[0]] = $tupla[1];
             $listaConf = $t;
+            $listaConf['dialer.qos'] *= 100.0;
         } else {
-            // TODO: qué debe mostrarse si falla query?
-            $listaConf = array();
+            // No se pudo leer valor_config: se informa el error en vez de
+            // devolver una configuración vacía
+            // EN: valor_config could not be read: report the error instead
+            // of returning an empty configuration
+            $this->errMsg = $this->_DB->errMsg;
+            return FALSE;
         }
-        $listaConf['dialer.qos'] *= 100.0;
         return $listaConf;
     }
 

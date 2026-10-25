@@ -44,6 +44,7 @@ $arrLangModule=array(
 'Start' => 'Başlat',
 'Stop' => 'Durdur',
 'Internal DB error' => 'Sunucu veritabanı hatası',
+'Could not read the current settings' => 'Geçerli ayarlar okunamadı',
 'Dialer Status' => 'Arama Durumu',
 'Current Status' => 'Şimdiki Durum',
 'Enable overcommit of outgoing calls' => 'Yapılan aramaların üzerine yazmayı etkinleştir',

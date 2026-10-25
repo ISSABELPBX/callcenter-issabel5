@@ -40,6 +40,7 @@ $arrLangModule = array(
     "Start" => "Пуск",
     "Stop" => "Стоп",
     "Internal DB error" => "Внутренняя ошибка БД",
+    "Could not read the current settings" => "Не удалось прочитать текущие настройки",
     "Dialer Status" => "Статус Наборщика",
     "Current Status" => "Текущий Статус",
     "Enable overcommit of outgoing calls" => "Разрешить превышение количества исходящих вызовов",
