@@ -379,10 +379,6 @@ class ECCPConn
          * password can no longer be captured with a sniffer. It is still
          * accepted with or without md5 hash for compatibility with existing
          * clients. */
-        /* TODO: se puede almacenar cuál agente(s) está autorizado a atender en
-         * la tabla eccp_authorized_clients
-         * TODO: can store which agent(s) is authorized to attend in the
-         * eccp_authorized_clients table */
         $sPeticionSQL =
             'SELECT COUNT(*) AS N FROM eccp_authorized_clients '.
             'WHERE username = ? AND (md5_password = ? OR md5_password = md5(?))';
@@ -1326,14 +1322,18 @@ class ECCPConn
 
                     // TODO: extraer máxima longitud de base de datos
                     // TODO: extract maximum length from database
-                    if (strlen($sValor) > 250) {
+                    // El límite es la columna varchar(250), contada en caracteres:
+                    // un valor multibyte se mide con mb_strlen()
+                    // EN: the limit is the varchar(250) column, counted in
+                    // characters: a multibyte value is measured with mb_strlen()
+                    if (mb_strlen($sValor, 'UTF-8') > 250) {
                         $bDatosValidos = FALSE;
                         $this->_agregarRespuestaFallo($xml_saveFormDataResponse, 413, 'Form value too large: '.$idForm.' - '.$idField);
 
                     // Validar que el campo de fecha tenga valor correcto
                     // Validate that date field has correct value
                     } elseif ($infoCampo['type'] == 'DATE' &&
-                        $sValor != '' && !(preg_match('/^\d{4}-\d{2}-\d{2}$/', $sValor) || preg_match('/^\d{4}-\d{2}-\d{2} d{2}:\d{2}:\d{2}$/', $sValor))) {
+                        $sValor != '' && !(preg_match('/^\d{4}-\d{2}-\d{2}$/', $sValor) || preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $sValor))) {
                         $bDatosValidos = FALSE;
                         $this->_agregarRespuestaFallo($xml_saveFormDataResponse, 406,
                             'Date format not acceptable, must be yyyy-mm-dd or yyyy-mm-dd hh:mm:ss: '.$idForm.' - '.$idField);

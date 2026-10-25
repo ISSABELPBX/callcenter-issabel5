@@ -70,7 +70,16 @@ function form_Configuration(&$oDB, $smarty, $module_name, $local_templates_dir)
 // modified by Pajulio,  =& resplace by = //
     $objConfig = new PaloSantoConfiguration($oDB);
     $listaConf = $objConfig->ObtainConfiguration();
-    
+    if (!is_array($listaConf)) {
+        // No se pudo leer la configuración: no se ofrece un formulario con
+        // valores por omisión, cuyo Guardar sobrescribiría la configuración real.
+        // EN: The settings could not be read: no form is offered with default
+        // values, whose Save would overwrite the real settings.
+        $smarty->assign("mb_title", _tr('Internal DB error'));
+        $smarty->assign("mb_message", _tr('Could not read the current settings').' '.$objConfig->errMsg);
+        return '';
+    }
+
 //    print_r($listaConf);
     $camposConocidos = array(
         'asterisk.asthost' => 'asterisk_asthost',

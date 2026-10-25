@@ -562,7 +562,7 @@ SQL_OUTGOING;
         // TODO: volver configurable
         // EN: TODO: make configurable
         $recordingpath = '/var/spool/asterisk/monitor';
-        if ($tupla['recordingfile']{0} != '/')
+        if (substr($tupla['recordingfile'], 0, 1) != '/')
             $tupla['recordingfile'] = $recordingpath.'/'.$tupla['recordingfile'];
         return array(
             $tupla['recordingfile'],            // Ruta de archivo real // EN: Real file path

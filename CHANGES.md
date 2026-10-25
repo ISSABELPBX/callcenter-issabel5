@@ -7,6 +7,13 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.3.32
+
+- Bug fix: a form answer is measured in characters, not bytes - an Arabic answer over 125 characters was refused as too large though its column holds 250 characters
+- Bug fix: a Date form field accepts yyyy-mm-dd hh:mm:ss as its error message always said, and no longer stores a value such as 2026-03-10 dd:30:00 - the date-time check was missing one backslash
+- Bug fix: Calls Detail no longer reads the recording path with a curly-brace string offset, deprecated on PHP 7.4 and an error on PHP 8
+- Bug fix: Call Center Configuration shows a database error and no form when its settings cannot be read, instead of a form of defaults whose Save would overwrite the real settings
+
 ## 5.3.31
 
 - Bug fix: an incoming call that leaves its queue before its call_entry row is back from the database (Leave Empty strict with a failover queue) is now recorded abandonada, with its end time, wait, progress entry and recording, instead of staying en-cola for good

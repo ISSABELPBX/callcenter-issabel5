@@ -43,6 +43,7 @@ $arrLangModule=array(
 'Start' => 'Start',
 'Stop' => 'Stop',
 'Internal DB error' => 'Internal DB error',
+'Could not read the current settings' => 'Could not read the current settings',
 'Dialer Status' => 'Dialer Status',
 'Current Status' => 'Current Status',
 'Enable overcommit of outgoing calls' => 'Enable overcommit of outgoing calls',

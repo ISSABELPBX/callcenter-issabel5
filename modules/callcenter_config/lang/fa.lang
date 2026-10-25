@@ -43,6 +43,7 @@ $arrLangModule=array(
 'Start' => 'شروع',
 'Stop' => 'توقف',
 'Internal DB error' => 'خطاي ديتابيس داخلي',
+'Could not read the current settings' => 'تنظیمات فعلی خوانده نشد',
 'Dialer Status' => 'وضعيت شماره گير',
 'Current Status' => 'وضعيت فعلي',
 'Enable overcommit of outgoing calls' => 'فعال نمودن انجام بيش از اندازه تماس هاي خروجي',
