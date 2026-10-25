@@ -40,6 +40,19 @@ class ListaLlamadas implements IteratorAggregate
     );
     private $_idcurrentcall_retrasado = array();
 
+    /* Llamadas entrantes finalizadas antes de recibir su ID de inserción,
+     * por uniqueid e id_queue_call_entry: el objeto Llamada mismo, con su
+     * actualización final y sus grabaciones pendientes. La respuesta
+     * idnewcall lleva la cola que insertó, así que el emparejamiento es
+     * exacto: un insert descartado jamás entregará su actualización a la
+     * fila de otra cola. */
+    /* Incoming calls finalized before their insert ID arrived, keyed by
+     * uniqueid and id_queue_call_entry: the Llamada object itself, with its
+     * final update and pending recordings. The idnewcall reply carries the
+     * queue it inserted, so the pairing is exact: a discarded insert can
+     * never hand its update to another queue's row. */
+    private $_finalizacionPendiente = array();
+
     function __construct($tuberia, $log)
     {
     	$this->_tuberia = $tuberia;
@@ -98,6 +111,11 @@ class ListaLlamadas implements IteratorAggregate
     		        $this->_idcurrentcall_retrasado[$obj->tipo_llamada][] = $obj->id_llamada;
     		    }
 
+    		    if (!is_null($obj->finalizacionPendiente)) {
+    		        $this->_finalizacionPendiente[$obj->tipo_llamada]
+    		            [$obj->uniqueid][(string)$obj->id_queue_call_entry] = $obj;
+    		    }
+
                 unset($this->_llamadas[$k]);
                 if ($obj->tipo_llamada == 'outgoing' && isset($this->_indices['id_llamada_saliente'][$obj->id_llamada]))
                     unset($this->_indices['id_llamada_saliente'][$obj->id_llamada]);
@@ -140,6 +158,30 @@ class ListaLlamadas implements IteratorAggregate
             return TRUE;
         }
         return FALSE;
+    }
+
+    /**
+     * Procedimiento que saca la llamada finalizada antes de recibir su ID
+     * de inserción, para aplicarle el ID de esa misma inserción (mismo
+     * uniqueid y misma cola) con aplicarIdLlamadaFinalizada().
+     *
+     * @param string    $t          Tipo de llamada
+     * @param string    $uniqueid   Uniqueid de la llamada
+     * @param int|null  $idq        id_queue_call_entry de la inserción
+     *
+     * @return  Llamada|null  La llamada aparcada, o NULL si no hay ninguna
+     */
+    function sacarFinalizacionPendiente($t, $uniqueid, $idq)
+    {
+        $k = (string)$idq;
+        if (isset($this->_finalizacionPendiente[$t][$uniqueid][$k])) {
+            $p = $this->_finalizacionPendiente[$t][$uniqueid][$k];
+            unset($this->_finalizacionPendiente[$t][$uniqueid][$k]);
+            if (count($this->_finalizacionPendiente[$t][$uniqueid]) == 0)
+                unset($this->_finalizacionPendiente[$t][$uniqueid]);
+            return $p;
+        }
+        return NULL;
     }
 
     function dump($log)

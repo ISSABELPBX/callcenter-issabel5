@@ -892,7 +892,9 @@ class SQLWorkerProcess extends TuberiaProcess
         // Mandar de vuelta el ID de inserción a AMIEventProcess
         // Send back the insertion ID to AMIEventProcess
         $eventos[] = array('AMIEventProcess', 'idnewcall',
-            array($tipo_llamada, $paramInsertar['uniqueid'], $idCall));
+            array($tipo_llamada, $paramInsertar['uniqueid'], $idCall,
+                isset($paramInsertar['id_queue_call_entry'])
+                    ? $paramInsertar['id_queue_call_entry'] : NULL));
 
         // Para llamada entrante se debe de insertar el log de progreso
         // For incoming call, progress log must be inserted

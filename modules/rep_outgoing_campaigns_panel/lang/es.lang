@@ -125,5 +125,8 @@ $arrLangModule=array(
 'Hold'=>'Hold',
 'On Call (Hold)'=>'En llamada (En espera)',
 'Outgoing Campaigns Panel'=>'Panel de Campañas Salientes',
+'Today' => 'Hoy',
+'Yesterday' => 'Ayer',
+'Tomorrow' => 'Mañana',
 );
 ?>

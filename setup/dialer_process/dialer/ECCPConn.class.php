@@ -379,10 +379,6 @@ class ECCPConn
          * password can no longer be captured with a sniffer. It is still
          * accepted with or without md5 hash for compatibility with existing
          * clients. */
-        /* TODO: se puede almacenar cuál agente(s) está autorizado a atender en
-         * la tabla eccp_authorized_clients
-         * TODO: can store which agent(s) is authorized to attend in the
-         * eccp_authorized_clients table */
         $sPeticionSQL =
             'SELECT COUNT(*) AS N FROM eccp_authorized_clients '.
             'WHERE username = ? AND (md5_password = ? OR md5_password = md5(?))';

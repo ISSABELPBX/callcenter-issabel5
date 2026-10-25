@@ -40,5 +40,8 @@ $arrLangModule = array(
     "Total break time" => "Tiempo total de pausas",
     "Total hold time" => "Tiempo total en espera",
     "HOLD" => "EN ESPERA",
+    "Today" => "Hoy",
+    "Yesterday" => "Ayer",
+    "Tomorrow" => "Mañana",
 );
 ?>

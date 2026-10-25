@@ -906,9 +906,31 @@ class AMIEventProcess extends TuberiaProcess
         if (!$r) $this->_tuberia->enviarRespuesta($sFuente, FALSE);
     }
 
-    private function _idnewcall($tipo_llamada, $uniqueid, $id_call)
+    private function _idnewcall($tipo_llamada, $uniqueid, $id_call, $id_queue_call_entry = NULL)
     {
     	if ($tipo_llamada == 'incoming') {
+    		/* Una llamada entrante puede haberse finalizado (p.ej. expulsada
+    		 * por Leave Empty) antes de que llegara este ID de inserción; la
+    		 * llamada quedó aparcada en la lista, junto con la cola de la
+    		 * inserción. El emparejamiento por (uniqueid, id_queue_call_entry)
+    		 * garantiza que este ID cierre la fila correcta aunque otra cola
+    		 * haya reutilizado el uniqueid, o aunque un insert anterior haya
+    		 * sido descartado por un error permanente de base de datos. */
+    		/* An incoming call may have been finalized (e.g. kicked out by
+    		 * Leave Empty) before this insert ID arrived; the call was left
+    		 * parked in the list, together with the insert's queue. Pairing
+    		 * by (uniqueid, id_queue_call_entry) guarantees this ID closes
+    		 * the right row even when another queue reused the uniqueid, or
+    		 * an earlier insert was discarded by a permanent database
+    		 * error. */
+    		$llamadaFinal = $this->_listaLlamadas->sacarFinalizacionPendiente(
+    		    'incoming', $uniqueid, $id_queue_call_entry);
+    		if (!is_null($llamadaFinal)) {
+    		    $llamadaFinal->aplicarIdLlamadaFinalizada($id_call);
+    		    $this->_log->output('INFO: '.__METHOD__." id=$id_call aplicado a ".
+    		        "llamada finalizada antes de recibir su ID, uniqueid=$uniqueid | EN: id=$id_call applied to a call finalized before its ID arrived, uniqueid=$uniqueid");
+    		    return;
+    		}
     		$llamada = $this->_listaLlamadas->buscar('uniqueid', $uniqueid);
             if (is_null($llamada)) {
             	$this->_log->output('ERR: '.__METHOD__." no se encuentra llamada con tipo=$tipo_llamada id=$id_call | EN: call not found with type=$tipo_llamada id=$id_call");

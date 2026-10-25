@@ -134,5 +134,8 @@ $arrLangModule = array(
 'Waiting for call'=>'Waiting for call',
 'Extension is already in use by another agent' => 'Extension is already in use by another agent',
 'Extension is not registered' => 'Extension is not registered',
+'Today' => 'Today',
+'Yesterday' => 'Yesterday',
+'Tomorrow' => 'Tomorrow',
 );
 ?>

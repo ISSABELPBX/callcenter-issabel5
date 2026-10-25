@@ -1140,16 +1140,10 @@ class PaloSantoConsola
                 if (isset($evt->agent_number)) $evento['agent_number'] = (string)$evt->agent_number;
                 switch ($sNombreEvento) {
                 case 'agentloggedin':
-                    // TODO: implementar para consola de monitoreo
-                    // EN: TODO: implement for monitoring console
-                    break;
                 case 'agentfailedlogin':
-                    // TODO: implementar para consola de monitoreo
-                    // EN: TODO: implement for monitoring console
-                    break;
                 case 'agentloggedout':
-                    // TODO: no se devuelve la lista de colas reportada
-                    // EN: TODO: the list of reported queues is not returned
+                    // Estos eventos sólo traen el agente, ya leído arriba
+                    // EN: These events carry only the agent, already read above
                     break;
                 case 'agentlinked':
                     $evento['remote_channel'] = (string)$evt->remote_channel;

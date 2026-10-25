@@ -30,14 +30,22 @@ require_once "modules/agent_console/libs/paloSantoConsola.class.php";
  * Calculate datetime range based on shift hours.
  * Supports overnight shifts where fromHour > toHour (e.g., 22:00 to 06:00).
  *
+ * Once the current hour has reached the fromHour of an overnight shift,
+ * the shift in progress is tonight's (today -> tomorrow); otherwise it is
+ * the last one that ended (yesterday -> today) - the same rule the agent
+ * console's agentConsole_calculateShiftDatetimeRange applies.
+ *
  * @param int $fromHour Hour to start shift (0-23)
  * @param int $toHour Hour to end shift (0-23)
+ * @param int $now Timestamp the range is computed at (default: now)
  * @return array Array with 'start' and 'end' datetime strings
  */
-function calculateShiftDatetimeRange($fromHour, $toHour)
+function calculateShiftDatetimeRange($fromHour, $toHour, $now = NULL)
 {
-    $today = date('Y-m-d');
-    $yesterday = date('Y-m-d', strtotime('-1 day'));
+    if (is_null($now)) $now = time();
+    $today = date('Y-m-d', $now);
+    $yesterday = date('Y-m-d', $now - 86400);
+    $tomorrow = date('Y-m-d', $now + 86400);
 
     $fromHour = (int)$fromHour;
     $toHour = (int)$toHour;
@@ -47,9 +55,16 @@ function calculateShiftDatetimeRange($fromHour, $toHour)
     $toHour = max(0, min(23, $toHour));
 
     if ($fromHour > $toHour) {
-        // Overnight shift: yesterday's fromHour to today's toHour
-        $datetimeStart = $yesterday . ' ' . sprintf('%02d:00:00', $fromHour);
-        $datetimeEnd = $today . ' ' . sprintf('%02d:59:59', $toHour);
+        // Overnight shift
+        if (date('G', $now) >= $fromHour) {
+            // Tonight's shift is the one in progress
+            $datetimeStart = $today . ' ' . sprintf('%02d:00:00', $fromHour);
+            $datetimeEnd = $tomorrow . ' ' . sprintf('%02d:59:59', $toHour);
+        } else {
+            // The last shift that ended
+            $datetimeStart = $yesterday . ' ' . sprintf('%02d:00:00', $fromHour);
+            $datetimeEnd = $today . ' ' . sprintf('%02d:59:59', $toHour);
+        }
     } else {
         // Same-day shift: today's fromHour to today's toHour
         $datetimeStart = $today . ' ' . sprintf('%02d:00:00', $fromHour);
@@ -60,6 +75,43 @@ function calculateShiftDatetimeRange($fromHour, $toHour)
         'start' => $datetimeStart,
         'end' => $datetimeEnd,
     );
+}
+
+/**
+ * Build the range label the bar shows beside the filter. The server owns
+ * it: it is computed with the window and the same $now, and the browser
+ * only displays it. A same-day window renders "<word> HH:00 - HH:59"; an
+ * overnight one "<word of start> HH:00 - <word of end> HH:59", each word
+ * Yesterday, Today or Tomorrow against the current date.
+ *
+ * @param array $range Array with 'start' and 'end' datetime strings
+ * @param int $now Timestamp the label is computed at (default: now)
+ * @return string The label
+ */
+function shiftRangeLabel($range, $now = NULL)
+{
+    if (is_null($now)) $now = time();
+    $today = date('Y-m-d', $now);
+    $sStartDate = date('Y-m-d', strtotime($range['start']));
+    $sEndDate = date('Y-m-d', strtotime($range['end']));
+    $sFromHour = date('H', strtotime($range['start']));
+    $sToHour = date('H', strtotime($range['end']));
+
+    // Day word of a range date against the current date. Under the window
+    // rule the start day is always today or yesterday and the end day
+    // tomorrow or today, so only these three words can appear.
+    $dayWord = function ($sDate) use ($today) {
+        if ($sDate == $today) return _tr('Today');
+        if ($sDate == date('Y-m-d', strtotime($today . ' -1 day'))) return _tr('Yesterday');
+        if ($sDate == date('Y-m-d', strtotime($today . ' +1 day'))) return _tr('Tomorrow');
+        return $sDate;
+    };
+
+    if ($sStartDate == $sEndDate) {
+        return $dayWord($sStartDate) . ' ' . $sFromHour . ':00 - ' . $sToHour . ':59';
+    }
+    return $dayWord($sStartDate) . ' ' . $sFromHour . ':00 - '
+        . $dayWord($sEndDate) . ' ' . $sToHour . ':59';
 }
 
 function _moduleContent(&$smarty, $module_name)
@@ -163,6 +215,7 @@ function manejarMonitoreo_getIncomingPanelData($module_name, $smarty, $sDirLocal
     $shiftRange = calculateShiftDatetimeRange($shiftFrom, $shiftTo);
     $datetime_start = $shiftRange['start'];
     $datetime_end = $shiftRange['end'];
+    $respuesta['shift_label'] = shiftRangeLabel($shiftRange);
 
     $oPaloConsola = new PaloSantoConsola();
 
@@ -250,6 +303,9 @@ function manejarMonitoreo_checkStatusPanel($module_name, $smarty, $sDirLocalPlan
     $shiftRange = calculateShiftDatetimeRange($shiftFrom, $shiftTo);
     $datetime_start = $shiftRange['start'];
     $datetime_end = $shiftRange['end'];
+    // The label rides with every response; the array below is rebuilt each
+    // round, so it is put into the literal itself
+    $sShiftLabel = shiftRangeLabel($shiftRange);
 
     // Mode: Long-Polling or Server-sent Events
     $bSSE = detectSSEMode();
@@ -332,6 +388,7 @@ function manejarMonitoreo_checkStatusPanel($module_name, $smarty, $sDirLocalPlan
 
         $respuesta = array(
             'status' => 'success',
+            'shift_label' => $sShiftLabel,
             'statuscount' => $combinedStatus['statuscount'],
             'stats' => $combinedStatus['stats'],
             'activecalls' => $estadoCampaniaLlamadas,

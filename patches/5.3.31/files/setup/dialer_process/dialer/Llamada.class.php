@@ -182,6 +182,14 @@ class Llamada
     // Actualizaciones pendientes en la base de datos por faltar id_llamada
     private $_actualizacionesPendientes = array();
 
+    // Actualización final (update + progress) diferida por llegarse antes
+    // del ID de inserción. El objeto mismo queda aparcado en ListaLlamadas
+    // y el ID tardío se aplica con aplicarIdLlamadaFinalizada().
+    // Final update (update + progress) deferred for arriving before the
+    // insert ID. The object itself is parked in ListaLlamadas and the late
+    // ID is applied by aplicarIdLlamadaFinalizada().
+    private $_finalizacionPendiente = NULL;
+
     /* Esta bandera indica si se ha señalado final de procesamiento de la
      * llamada, y por lo tanto, candidata a ser quitada del seguimiento, cuando
      * todavía no ha llegado el aviso del inicio de Originate.
@@ -299,6 +307,8 @@ class Llamada
         case 'id_current_call': return $this->_id_current_call;
         case 'waiting_id_current_call':
                                 return $this->_waiting_id_current_call;
+        case 'finalizacionPendiente':
+                                return $this->_finalizacionPendiente;
         case 'mutedchannels':   return $this->_mutedchannels;
         case 'park_exten':      return $this->_park_exten;
         default:
@@ -1197,8 +1207,15 @@ class Llamada
         $sAgente_agendado = NULL;
 
         if (is_null($this->id_llamada)) {
-        	$this->_log->output('ERR: '.__METHOD__.': todavía no ha llegado '.
-                'ID de llamada, no se garantiza integridad de datos para esta llamada. | EN: call ID has not arrived yet, data integrity not guaranteed for this call.');
+            /* La actualización final se difiere hasta que llegue el ID de la
+             * inserción (ver _idnewcall en AMIEventProcess); la llamada se
+             * quita de la lista y ListaLlamadas guarda el objeto con todo lo
+             * pendiente. */
+            /* The final update is deferred until the insert ID arrives (see
+             * _idnewcall in AMIEventProcess); the call leaves the list and
+             * ListaLlamadas keeps the object with everything pending. */
+            $this->_log->output('INFO: '.__METHOD__.': todavía no ha llegado '.
+                'ID de llamada, la actualización final se difiere hasta recibirlo. | EN: call ID has not arrived yet, the final update is deferred until it does.');
         }
 
     	$this->timestamp_hangup = $timestamp;
@@ -1299,8 +1316,25 @@ class Llamada
                 $paramProgreso = NULL;
             }
         } else {
-            // Esto no debería ocurrir en condiciones normales
-            // This should not happen under normal conditions
+            /* El ID de inserción no ha llegado (p.ej. un abandono por Leave
+             * Empty en el mismo instante que el Join). Se difieren la
+             * actualización y el aviso de progreso: ListaLlamadas::remover()
+             * guarda este objeto al quitar la llamada de la lista, y
+             * aplicarIdLlamadaFinalizada() los envía, ya con el ID, cuando
+             * éste llega. Las grabaciones pendientes quedan en
+             * _actualizacionesPendientes y salen en el mismo momento. */
+            /* The insert ID has not arrived yet (e.g. a Leave Empty abandon
+             * in the same instant as the Join). Defer both the update and
+             * the progress notice: ListaLlamadas::remover() keeps this
+             * object when the call leaves the list, and
+             * aplicarIdLlamadaFinalizada() sends them, ID filled in, once
+             * it arrives. Pending recordings stay in
+             * _actualizacionesPendientes and go out at the same moment. */
+            $this->_finalizacionPendiente = array(
+                'actualizar'    =>  $paramActualizar,
+                'progreso'      =>  $paramProgreso,
+            );
+            unset($this->_actualizacionesPendientes['sqlupdatecalls']);
             $paramProgreso = NULL;
         }
 
@@ -1360,6 +1394,46 @@ class Llamada
         }
 
 
+    }
+
+    /* Aplica el ID de inserción a una llamada finalizada antes de
+     * recibirlo. A diferencia del setter id_llamada, no toca los índices
+     * de ListaLlamadas: la llamada ya salió de la lista. Envía todo lo
+     * pendiente en el orden del camino ordinario - grabaciones aparcadas,
+     * actualización final y aviso de progreso - y a partir de aquí la
+     * llamada conoce su ID, así que una grabación tardía (el GetVar de
+     * MIXMONITOR_FILENAME responde después) saldrá sola desde
+     * agregarArchivoGrabacion(). */
+    /* Applies the insert ID to a call finalized before receiving it. Unlike
+     * the id_llamada setter, it does no ListaLlamadas index work: the call
+     * has already left the list. It sends everything pending in the
+     * ordinary path's order - parked recordings, final update and progress
+     * notice - and from here on the call knows its ID, so a late recording
+     * (the MIXMONITOR_FILENAME GetVar answering afterwards) goes out on its
+     * own from agregarArchivoGrabacion(). */
+    public function aplicarIdLlamadaFinalizada($id_call)
+    {
+        $this->_id_llamada = (int)$id_call;
+        if (isset($this->_actualizacionesPendientes['recording'])) {
+            foreach ($this->_actualizacionesPendientes['recording'] as $tupla) {
+                $this->_tuberia->msg_SQLWorkerProcess_agregarArchivoGrabacion(
+                    $this->tipo_llamada, $this->id_llamada, $tupla['uniqueid'],
+                    $tupla['channel'], $tupla['recordingfile']);
+            }
+            unset($this->_actualizacionesPendientes['recording']);
+        }
+        if (!is_null($this->_finalizacionPendiente)) {
+            $paramActualizar = $this->_finalizacionPendiente['actualizar'];
+            $paramActualizar['id'] = $this->id_llamada;
+            $paramProgreso = $this->_finalizacionPendiente['progreso'];
+            $paramProgreso['id_call_'.$this->tipo_llamada] = $this->id_llamada;
+            if (!is_null($paramActualizar['id_campaign']))
+                $paramProgreso['id_campaign_'.$this->tipo_llamada] =
+                    $paramActualizar['id_campaign'];
+            $this->_finalizacionPendiente = NULL;
+            $this->_tuberia->msg_SQLWorkerProcess_sqlupdatecalls($paramActualizar);
+            $this->_tuberia->msg_SQLWorkerProcess_notificarProgresoLlamada($paramProgreso);
+        }
     }
 
     public function agregarArchivoGrabacion($uniqueid, $channel, $recordingfile)
