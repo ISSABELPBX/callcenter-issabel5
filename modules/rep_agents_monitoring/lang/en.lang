@@ -45,5 +45,8 @@ $arrLangModule=array(
 "Shift From" => "From",
 "Shift To" => "To",
 "Apply" => "Apply",
+"Today" => "Today",
+"Yesterday" => "Yesterday",
+"Tomorrow" => "Tomorrow",
 
 );?>

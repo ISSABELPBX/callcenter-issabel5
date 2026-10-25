@@ -20,6 +20,20 @@ var shiftToHour = 23;
 var STORAGE_KEY_SHIFT_FROM = 'agents_monitoring_shift_from';
 var STORAGE_KEY_SHIFT_TO = 'agents_monitoring_shift_to';
 
+// Shift-based time tracking. The server owns the window: it sends the
+// totals together with the window's two ends (shiftStartTs/shiftEndTs, ms)
+// and the range label. Until the first server value arrives the bounds are
+// null and the counters run unbounded, as they always did. The browser
+// never re-derives the window's day rule.
+var shiftStartTs = null;      // ms epoch of the window start, from the server
+var shiftEndTs = null;        // ms epoch of the window end, from the server
+var lastShiftFetchTs = null;  // ms epoch of this page's fetch, set at initialize
+var shiftLabel = null;        // the server-built range label, if known
+// Each row keeps its own fetch time, estadoCliente[k]['shift_fetch_ts'] (ms),
+// set at initialize and by a poll carrying that row: the poll carries only
+// the rows whose status changed, so one page-wide fetch time would set every
+// other row back by the time since its own fetch.
+
 function loadShiftPreferences() {
 	var storedFrom = localStorage.getItem(STORAGE_KEY_SHIFT_FROM);
 	var storedTo = localStorage.getItem(STORAGE_KEY_SHIFT_TO);
@@ -46,14 +60,16 @@ function saveShiftPreferences() {
 
 function updateShiftRangeIndicator() {
 	var indicator = $('#shiftRangeIndicator');
+
+	// The server builds the label; before the first server value only the
+	// hours are shown, with no day word
+	if (shiftLabel != null) {
+		indicator.text(shiftLabel);
+		return;
+	}
 	var fromStr = (shiftFromHour < 10 ? '0' : '') + shiftFromHour + ':00';
 	var toStr = (shiftToHour < 10 ? '0' : '') + shiftToHour + ':59';
-
-	if (shiftFromHour > shiftToHour) {
-		indicator.text('Yesterday ' + fromStr + ' - Today ' + toStr);
-	} else {
-		indicator.text('Today ' + fromStr + ' - ' + toStr);
-	}
+	indicator.text(fromStr + ' - ' + toStr);
 }
 
 function applyShiftFilter() {
@@ -70,6 +86,7 @@ function applyShiftFilter() {
 	shiftToHour = newTo;
 
 	saveShiftPreferences();
+	shiftLabel = null;   // the applied window's label arrives with the reload
 	updateShiftRangeIndicator();
 
 	// Close existing SSE connection before reload
@@ -92,15 +109,29 @@ function verificar_error_session(respuesta)
 	}
 }
 
-//Inicializar estado del cliente al refrescar la página
-function initialize_client_state(nuevoEstado, nuevoEstadoHash)
+//Inicializar estado del cliente al refrescar la página. Every argument
+//after the hash may be undefined: the server owns the window, and nothing
+//is done with an argument that did not arrive.
+function initialize_client_state(nuevoEstado, nuevoEstadoHash, shiftStartEpochS, shiftEndEpochS, shiftFrom, shiftTo, shiftLabelS)
 {
 	estadoCliente = nuevoEstado;
 	estadoClienteHash = nuevoEstadoHash;
 
+	if (shiftStartEpochS !== undefined && shiftEndEpochS !== undefined) {
+		shiftStartTs = shiftStartEpochS * 1000;
+		shiftEndTs = shiftEndEpochS * 1000;
+		lastShiftFetchTs = new Date().getTime();
+	}
+	if (shiftLabelS !== undefined) {
+		shiftLabel = shiftLabelS;
+	}
+
 	var fechaInicio = new Date();
 	var regexp = /^(queue-\d+)/;
 	for (var k in estadoCliente) {
+		// Every row was fetched by this initialize, so every row's fetch
+		// time is this instant until a poll carrying the row replaces it
+		estadoCliente[k]['shift_fetch_ts'] = fechaInicio.getTime();
 		var keys = ['sec_laststatus', 'logintime', 'sec_calls', 'sec_breaks', 'sec_holds'];
 		for (var j = 0; j < keys.length; j++) {
 			var ktimestamp = keys[j];
@@ -120,8 +151,31 @@ function initialize_client_state(nuevoEstado, nuevoEstadoHash)
 		}
 	}
 
-	// Initialize shift filter UI
+	// Initialize shift filter UI. The server owns the filter: when the
+	// browser has a stored filter that differs from the server's hours and
+	// the URL carries no shift_from, one location.replace() pushes the
+	// stored filter back to the server - the replaced URL carries it, so
+	// this hops once. Otherwise the selects show the server's hours and
+	// they are saved to localStorage.
 	loadShiftPreferences();
+	if (shiftFrom !== undefined && shiftTo !== undefined) {
+		var storedFrom = localStorage.getItem(STORAGE_KEY_SHIFT_FROM);
+		var storedTo = localStorage.getItem(STORAGE_KEY_SHIFT_TO);
+		if (storedFrom !== null && storedTo !== null
+			&& (shiftFromHour != shiftFrom || shiftToHour != shiftTo)
+			&& location.search.indexOf('shift_from=') < 0) {
+			if (evtSource != null) {
+				evtSource.close();
+				evtSource = null;
+			}
+			location.replace('index.php?menu=' + module_name
+				+ '&shift_from=' + shiftFromHour + '&shift_to=' + shiftToHour);
+			return;
+		}
+		shiftFromHour = shiftFrom;
+		shiftToHour = shiftTo;
+		saveShiftPreferences();
+	}
 	$('#shiftFromHour').val(('0' + shiftFromHour).slice(-2));
 	$('#shiftToHour').val(('0' + shiftToHour).slice(-2));
 	updateShiftRangeIndicator();
@@ -169,7 +223,7 @@ function actualizar_valores_cronometro()
 
 		// El tiempo total de login se actualiza si el estado no es offline
 		if (estadoCliente[k]['status'] != 'offline') {
-			totalesCola[kq]['logintime'] += formatoCronometro('#'+k+'-logintime', estadoCliente[k]['logintime']);
+			totalesCola[kq]['logintime'] += formatoShiftTimer('#'+k+'-logintime', estadoCliente[k]['orig_logintime'], estadoCliente[k]['shift_fetch_ts']) * 1000;
 		} else {
 			totalesCola[kq]['logintime'] += estadoCliente[k]['orig_logintime'] * 1000;
 		}
@@ -177,21 +231,21 @@ function actualizar_valores_cronometro()
 		// El tiempo total de llamadas se actualiza si el estado es oncall y si
 		// está activa la bandera oncallupdate
 		if (estadoCliente[k]['status'] == 'oncall' && estadoCliente[k]['oncallupdate']) {
-			totalesCola[kq]['sec_calls'] += formatoCronometro('#'+k+'-sec_calls', estadoCliente[k]['sec_calls']);
+			totalesCola[kq]['sec_calls'] += formatoShiftTimer('#'+k+'-sec_calls', estadoCliente[k]['orig_sec_calls'], estadoCliente[k]['shift_fetch_ts']) * 1000;
 		} else {
 			totalesCola[kq]['sec_calls'] += estadoCliente[k]['orig_sec_calls'] * 1000;
 		}
 
 		// Break time increments when agent is on a break-type pause
 		if (estadoCliente[k]['status'] == 'paused' && estadoCliente[k]['isbreakpause']) {
-			totalesCola[kq]['sec_breaks'] += formatoCronometro('#'+k+'-sec_breaks', estadoCliente[k]['sec_breaks']);
+			totalesCola[kq]['sec_breaks'] += formatoShiftTimer('#'+k+'-sec_breaks', estadoCliente[k]['orig_sec_breaks'], estadoCliente[k]['shift_fetch_ts']) * 1000;
 		} else {
 			totalesCola[kq]['sec_breaks'] += estadoCliente[k]['orig_sec_breaks'] * 1000;
 		}
 
 		// Hold time increments when agent is on a hold-type pause
 		if (estadoCliente[k]['onhold'] && estadoCliente[k]['isholdpause']) {
-			totalesCola[kq]['sec_holds'] += formatoCronometro('#'+k+'-sec_holds', estadoCliente[k]['sec_holds']);
+			totalesCola[kq]['sec_holds'] += formatoShiftTimer('#'+k+'-sec_holds', estadoCliente[k]['orig_sec_holds'], estadoCliente[k]['shift_fetch_ts']) * 1000;
 		} else {
 			totalesCola[kq]['sec_holds'] += estadoCliente[k]['orig_sec_holds'] * 1000;
 		}
@@ -213,6 +267,30 @@ function formatoCronometro(selector, fechaInicio)
 
 	formatoMilisegundo(selector, msec);
 	return msec;
+}
+
+// Render a shift stat: the server-reported seconds plus only the wall time
+// between the fetch and now that falls inside the window. Past the window
+// end it freezes at the boundary value; before the start it reads
+// 00:00:00; with no window known yet it counts plain wall time, as before.
+function formatoShiftTimer(selector, origSeconds, fetchMs) {
+	var nowMs = Date.now();
+	if (fetchMs === undefined) fetchMs = lastShiftFetchTs;
+	if (fetchMs == null) fetchMs = nowMs;
+	var clampMs = function (ms) {
+		if (shiftStartTs == null || shiftEndTs == null) return ms;
+		return Math.min(Math.max(ms, shiftStartTs), shiftEndTs);
+	};
+	var sec = origSeconds + Math.max(0, Math.floor((clampMs(nowMs) - clampMs(fetchMs)) / 1000));
+	var tiempo = [0, 0, 0];
+	tiempo[0] = sec % 60;
+	tiempo[1] = Math.floor(sec / 60) % 60;
+	tiempo[2] = Math.floor(sec / 3600);
+	for (var i = 0; i < 3; i++) {
+		if (tiempo[i] <= 9) tiempo[i] = "0" + tiempo[i];
+	}
+	$(selector).text(tiempo[2] + ':' + tiempo[1] + ':' + tiempo[0]);
+	return sec;
 }
 
 function formatoMilisegundo(selector, msec)
@@ -282,7 +360,22 @@ function manejarRespuestaStatus(respuesta)
 			} else {
 				estadoClienteHash = respuesta[k];
 			}
+		} else if (k == 'shift_start_epoch') {
+			// La ventana llega con la respuesta del servidor: solo los
+			// límites, nunca un tiempo de consulta de fila
+			shiftStartTs = respuesta[k] * 1000;
+		} else if (k == 'shift_end_epoch') {
+			shiftEndTs = respuesta[k] * 1000;
+		} else if (k == 'shift_label') {
+			if (respuesta[k] != null && respuesta[k] !== '') {
+				shiftLabel = respuesta[k];
+				updateShiftRangeIndicator();
+			}
 		} else if (estadoCliente[k] != null) {
+			// A row's values were computed at the server at this instant,
+			// so this response's time is this row's fetch time - only
+			// this row's, the response carries no other
+			estadoCliente[k]['shift_fetch_ts'] = fechaInicio.getTime();
 			if (estadoCliente[k]['status'] != respuesta[k]['status'] ||
 				estadoCliente[k]['onhold'] != respuesta[k]['onhold']) {
 				// El estado del agente ha cambiado, actualizar icono
@@ -328,7 +421,12 @@ function manejarRespuestaStatus(respuesta)
 					var d = new Date();
 					d.setTime(fechaInicio.getTime() - respuesta[k][ktimestamp] * 1000);
 					estadoCliente[k][ktimestamp] = d;
-					formatoCronometro('#'+k+'-'+ktimestamp, estadoCliente[k][ktimestamp]);
+					if (ktimestamp == 'sec_laststatus') {
+						// El último estado no es un contador de turno
+						formatoCronometro('#'+k+'-'+ktimestamp, estadoCliente[k][ktimestamp]);
+					} else {
+						formatoShiftTimer('#'+k+'-'+ktimestamp, estadoCliente[k]['orig_'+ktimestamp], estadoCliente[k]['shift_fetch_ts']);
+					}
 				}
 			}
 			estadoCliente[k]['oncallupdate'] = respuesta[k]['oncallupdate'];

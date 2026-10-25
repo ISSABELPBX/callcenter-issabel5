@@ -798,6 +798,7 @@ function manejarSesionActiva_HTML($module_name, &$smarty, $sDirLocalPlantillas, 
     $estadoInicial['shift_hold_time'] = $sec_shift_hold;
     $estadoInicial['shift_start_epoch'] = strtotime($shiftRange['start']);
     $estadoInicial['shift_end_epoch'] = strtotime($shiftRange['end']);
+    $estadoInicial['shift_label'] = agentConsole_shiftRangeLabel($shiftRange);
     $estadoInicial['is_hold_pause'] = (!is_null($estado['pauseinfo']) && in_array($estado['pauseinfo']['pausename'], isset($breakData['holdNames']) ? $breakData['holdNames'] : array()));
 
     // Decidir estado del break a mostrar
@@ -1089,8 +1090,6 @@ function _manejarSesionActiva_HTML_generarInformacion($smarty, $sDirLocalPlantil
                 $comboContactos[$idContacto] = $infoContactoViejo['cedula_ruc'].
                 ' - '.$infoContactoViejo['first_name'].' '.$infoContactoViejo['last_name'];
             } else {
-                /* TODO: dar formato adecuado para cuando contactos de llamadas
-                 * entrantes puedan tener atributos arbitrarios */
                 $comboContactos[$idContacto] = $sDescripcionContacto;
             }
         }
@@ -1438,7 +1437,7 @@ function manejarSesionActiva_saveforms($module_name, $smarty, $sDirLocalPlantill
             if (preg_match('/^field-(\d+)-(\d+)$/', $tupladata[0], $regs)) {
                 $formInfo[$regs[1]][$regs[2]] = $tupladata[1];
                 $_SESSION['callcenter']['ultimo_callsurvey']['call_survey'][$regs[1]][$regs[2]] = array(
-                    'label' =>  '', // TODO: asignar desde formulario de campaña
+                    'label' =>  '',
                     'value' =>  $tupladata[1],
                 );
             }
@@ -1509,6 +1508,7 @@ function manejarSesionActiva_updateShiftTimes($module_name, $smarty,
         'is_hold_pause'    => $isHoldPause,
         'shift_start_epoch' => strtotime($shiftRange['start']),
         'shift_end_epoch'   => strtotime($shiftRange['end']),
+        'shift_label'       => agentConsole_shiftRangeLabel($shiftRange),
     );
 
     $json = new Services_JSON();
@@ -2052,6 +2052,7 @@ function manejarSesionActiva_checkStatus($module_name, $smarty,
         // never re-derives it
         $iShiftStart = strtotime($shiftRange['start']);
         $iShiftEnd = strtotime($shiftRange['end']);
+        $sShiftLabel = agentConsole_shiftRangeLabel($shiftRange);
         foreach ($respuesta as $idx => $evt) {
             $respuesta[$idx]['shift_login_time'] = $sec_shift_login;
             $respuesta[$idx]['shift_break_time'] = $sec_shift_break;
@@ -2059,6 +2060,7 @@ function manejarSesionActiva_checkStatus($module_name, $smarty,
             $respuesta[$idx]['is_hold_pause'] = $is_hold_pause;
             $respuesta[$idx]['shift_start_epoch'] = $iShiftStart;
             $respuesta[$idx]['shift_end_epoch'] = $iShiftEnd;
+            $respuesta[$idx]['shift_label'] = $sShiftLabel;
         }
 
         jsonflush($bSSE, $respuesta);
@@ -2221,10 +2223,6 @@ function construirRespuesta_agentlinked($smarty, $sDirLocalPlantillas,
             if (count($infoContactoViejo) == 3) {
                 $sDescripcionContacto = $infoContactoViejo['cedula_ruc'].
                     ' - '.$infoContactoViejo['first_name'].' '.$infoContactoViejo['last_name'];
-            } else {
-                /* TODO: dar formato adecuado para cuando contactos de llamadas
-                 * entrantes puedan tener atributos arbitrarios */
-
             }
 
             /* El htmlentities de clave y valor es necesario porque del lado
@@ -2407,6 +2405,37 @@ function agentConsole_getSessionShiftRange()
     $toHour = isset($_SESSION['callcenter']['shift_to'])
         ? (int)$_SESSION['callcenter']['shift_to'] : 23;
     return agentConsole_calculateShiftDatetimeRange($fromHour, $toHour);
+}
+
+// EN: Build the range label the bar shows beside the filter. The server
+// owns it: it is computed with the window and the same $now, and the
+// browser only displays it. A same-day window renders "<word> HH:00 -
+// HH:59"; an overnight one "<word of start> HH:00 - <word of end> HH:59",
+// each word Yesterday, Today or Tomorrow against the current date.
+function agentConsole_shiftRangeLabel($range, $now = NULL)
+{
+    if (is_null($now)) $now = time();
+    $today = date('Y-m-d', $now);
+    $sStartDate = date('Y-m-d', strtotime($range['start']));
+    $sEndDate = date('Y-m-d', strtotime($range['end']));
+    $sFromHour = date('H', strtotime($range['start']));
+    $sToHour = date('H', strtotime($range['end']));
+
+    // EN: Day word of a range date against the current date. Under the
+    // window rule the start day is always today or yesterday and the end
+    // day tomorrow or today, so only these three words can appear.
+    $dayWord = function ($sDate) use ($today) {
+        if ($sDate == $today) return _tr('Today');
+        if ($sDate == date('Y-m-d', strtotime($today . ' -1 day'))) return _tr('Yesterday');
+        if ($sDate == date('Y-m-d', strtotime($today . ' +1 day'))) return _tr('Tomorrow');
+        return $sDate;
+    };
+
+    if ($sStartDate == $sEndDate) {
+        return $dayWord($sStartDate) . ' ' . $sFromHour . ':00 - ' . $sToHour . ':59';
+    }
+    return $dayWord($sStartDate) . ' ' . $sFromHour . ':00 - '
+        . $dayWord($sEndDate) . ' ' . $sToHour . ':59';
 }
 
 // EN: Query cumulative break time per agent (Break-type pauses only). Every

@@ -7,6 +7,17 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.3.31
+
+- Bug fix: an incoming call that leaves its queue before its call_entry row is back from the database (Leave Empty strict with a failover queue) is now recorded abandonada, with its end time, wait, progress entry and recording, instead of staying en-cola for good
+
+## 5.3.30
+
+- Bug fix: Agents Monitoring's login, talk, break and hold columns stop at the shift end and read 00:00:00 before the shift starts, instead of counting on
+- Bug fix: a break, a reload or another agent's status change no longer puts the whole day's totals into Agents Monitoring's shift columns or sets them back - the shift filter is kept in the session
+- Bug fix: an overnight shift on Agents Monitoring and both campaign monitoring panels is the shift in progress once its start hour has passed, as on the agent console
+- Bug fix: the shift label beside the bar names the right days on the agent console and the three monitoring pages, built by the server and translated
+
 ## 5.3.29
 
 - Bug fix: a deactivated agent no longer shows as active in the dialer's agent list until a restart - the agent-list refresh copies a same-id status change onto the known agent

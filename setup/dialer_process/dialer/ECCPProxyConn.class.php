@@ -100,17 +100,6 @@ class ECCPProxyConn extends MultiplexConn
                 'appcookie'     =>  $this->_sAppCookie,
                 'usuarioeccp'   =>  $this->_sUsuarioECCP,
             );
-
-            /* TODO: En una fase futura, en caso necesario, se requiere un
-             * worker dedicado exclusivamente a los accesos de DB necesarios
-             * para los eventos recibidos de AMIEventProcess. No se puede usar
-             * el mismo pool de workers que para las peticiones ECCP porque no
-             * se garantizaría el orden de atención de eventos.
-             * TODO: In a future phase, if necessary, a worker dedicated
-             * exclusively to the DB accesses required for events received
-             * from AMIEventProcess is required. The same pool of workers
-             * used for ECCP requests cannot be used because the order of
-             * event attention would not be guaranteed. */
             $this->_tuberia->msg_ECCPWorkerProcess_eccprequest($this->sKey, $request, $connvars);
         } else {
             // Marcador de error, se cierra la conexión

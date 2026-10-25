@@ -10,6 +10,7 @@ var longPoll = null;
 // Shift filter variables
 var shiftFromHour = 0;
 var shiftToHour = 23;
+var shiftLabel = null;   // the server-built range label, if known
 
 // localStorage keys for shift preferences
 var STORAGE_KEY_SHIFT_FROM = 'outgoing_panel_shift_from';
@@ -46,20 +47,19 @@ function saveShiftPreferences() {
 }
 
 /**
- * Update the shift range indicator text
+ * Update the shift range indicator text. The server builds the label;
+ * before the first server value only the hours are shown, with no day word.
  */
 function updateShiftRangeIndicator() {
     var indicator = $('#outgoingShiftRangeIndicator');
+
+    if (shiftLabel != null) {
+        indicator.text(shiftLabel);
+        return;
+    }
     var fromStr = (shiftFromHour < 10 ? '0' : '') + shiftFromHour + ':00';
     var toStr = (shiftToHour < 10 ? '0' : '') + shiftToHour + ':59';
-
-    if (shiftFromHour > shiftToHour) {
-        // Overnight shift: Yesterday's fromHour to Today's toHour
-        indicator.text('Yesterday ' + fromStr + ' - Today ' + toStr);
-    } else {
-        // Same-day shift
-        indicator.text('Today ' + fromStr + ' - ' + toStr);
-    }
+    indicator.text(fromStr + ' - ' + toStr);
 }
 
 /**
@@ -79,6 +79,7 @@ function applyShiftFilter() {
     shiftToHour = newTo;
 
     saveShiftPreferences();
+    shiftLabel = null;   // the applied window's label arrives with the next response
     updateShiftRangeIndicator();
 
     // Reload data with new shift parameters
@@ -182,6 +183,13 @@ function manejarRespuestaStatus(respuesta) {
         estadoClienteHash = respuesta.estadoClienteHash;
     }
 
+    // Update the server-built range label
+    if (respuesta.shift_label !== undefined && respuesta.shift_label !== null
+        && respuesta.shift_label !== '') {
+        shiftLabel = respuesta.shift_label;
+        updateShiftRangeIndicator();
+    }
+
     // Update stats
     updateStats(respuesta.statuscount, respuesta.stats);
 
@@ -217,6 +225,13 @@ function loadInitialData() {
             // Store hash
             if (respuesta.estadoClienteHash) {
                 estadoClienteHash = respuesta.estadoClienteHash;
+            }
+
+            // Update the server-built range label
+            if (respuesta.shift_label !== undefined && respuesta.shift_label !== null
+                && respuesta.shift_label !== '') {
+                shiftLabel = respuesta.shift_label;
+                updateShiftRangeIndicator();
             }
 
             // Update stats

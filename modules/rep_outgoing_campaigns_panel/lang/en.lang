@@ -127,5 +127,6 @@ $arrLangModule=array(
 'Apply' => 'Apply',
 'Yesterday' => 'Yesterday',
 'Today' => 'Today',
+'Tomorrow' => 'Tomorrow',
 );
 ?>

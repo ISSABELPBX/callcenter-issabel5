@@ -76,6 +76,7 @@ var shiftFromHour = 0;
 var shiftToHour = 23;
 var STORAGE_KEY_SHIFT_FROM = 'agent_console_shift_from';
 var STORAGE_KEY_SHIFT_TO = 'agent_console_shift_to';
+var shiftLabel = null;        // the server-built range label, if known
 
 function loadShiftPreferences() {
     var storedFrom = localStorage.getItem(STORAGE_KEY_SHIFT_FROM);
@@ -103,14 +104,16 @@ function saveShiftPreferences() {
 
 function updateShiftRangeIndicator() {
     var indicator = $('#shiftRangeIndicator');
+
+    // The server builds the label; before the first server value only the
+    // hours are shown, with no day word
+    if (shiftLabel != null) {
+        indicator.text(shiftLabel);
+        return;
+    }
     var fromStr = (shiftFromHour < 10 ? '0' : '') + shiftFromHour + ':00';
     var toStr = (shiftToHour < 10 ? '0' : '') + shiftToHour + ':59';
-
-    if (shiftFromHour > shiftToHour) {
-        indicator.text('Yesterday ' + fromStr + ' - Today ' + toStr);
-    } else {
-        indicator.text('Today ' + fromStr + ' - ' + toStr);
-    }
+    indicator.text(fromStr + ' - ' + toStr);
 }
 
 function applyShiftFilter() {
@@ -127,6 +130,7 @@ function applyShiftFilter() {
     shiftToHour = newTo;
 
     saveShiftPreferences();
+    shiftLabel = null;   // the applied window's label arrives with the next shift response
     updateShiftRangeIndicator();
 
     // Request updated shift times from server
@@ -388,6 +392,10 @@ function initialize_client_state(nuevoEstado)
 	}
 	if (nuevoEstado.shift_end_epoch !== undefined) {
 		shiftEndTs = nuevoEstado.shift_end_epoch * 1000;
+	}
+	if (nuevoEstado.shift_label !== undefined && nuevoEstado.shift_label !== null
+		&& nuevoEstado.shift_label !== '') {
+		shiftLabel = nuevoEstado.shift_label;
 	}
 	lastShiftFetchTs = new Date().getTime();
 
@@ -971,11 +979,16 @@ function do_updateShiftTimes()
             if (respuesta.shift_end_epoch !== undefined) {
                 shiftEndTs = respuesta.shift_end_epoch * 1000;
             }
+            if (respuesta.shift_label !== undefined && respuesta.shift_label !== null
+                && respuesta.shift_label !== '') {
+                shiftLabel = respuesta.shift_label;
+            }
             lastShiftFetchTs = new Date().getTime();
             // Update display immediately
             formatoShiftTimer('#shift-stat-login', origShiftLogin);
             formatoShiftTimer('#shift-stat-break', origShiftBreak);
             formatoShiftTimer('#shift-stat-hold', origShiftHold);
+            updateShiftRangeIndicator();
         }
     }, 'json');
 }
@@ -1065,8 +1078,13 @@ function manejarRespuestaStatus(respuesta)
 			shiftEndTs = respuesta[i].shift_end_epoch * 1000;
 			sawShiftValue = true;
 		}
+		if (respuesta[i].shift_label !== undefined && respuesta[i].shift_label !== null
+			&& respuesta[i].shift_label !== '') {
+			shiftLabel = respuesta[i].shift_label;
+		}
 		if (sawShiftValue) {
 			lastShiftFetchTs = new Date().getTime();
+			updateShiftRangeIndicator();
 		}
 
 		switch (respuesta[i].event) {

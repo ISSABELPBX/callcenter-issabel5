@@ -8,20 +8,17 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 
 ---
 
-## High
-
-### ECCP Client Authorization
-
-* **Type**: Feature
-* **Urgency**: High
-* **Date Added**: Original (pre-2011)
-* **Location**: `ECCPConn.class.php:344-347`
-* **Description**: Implement `eccp_authorized_clients` table for agent authorization. The table exists and is used for authorization lookup, but could be expanded for IP/client-based authorization.
-* **Status**: Partially Solved
-
----
-
 ## Medium
+
+### Default ECCP Console Password
+
+* **Type**: Security
+* **Urgency**: Medium
+* **Date Added**: 2026-10-25
+* **Location**: `paloSantoConsola.class.php:80-97` (`_obtenerConexion('ECCP')`), `agents/libs/Agentes.class.php:704-720` and `cb_extensions/libs/Agentes.class.php:264-280` (`_refreshDialerAgentList()`), `ECCPConn.class.php:382-384` (`Request_login`)
+* **Description**: Every install has the ECCP user `agentconsole` with the well-known password `agentconsole`: the three GUI sites above insert it when the row is missing. The listener is reachable from the network ("ECCP Listen Address"), so anyone who can reach the port can log in and use every `eccpauth` request: `getcallinfo` (customer number and attributes), campaign and queue status, and the event stream. Agent actions still need that agent's own `eccp_password` hash. The built-in consoles never send the plaintext: the browser talks to Apache, and PHP connects to `localhost`, reads `md5_password` from the table and sends the hash itself, which `Request_login` accepts (`md5_password = ?`). Measured on the dev box 2026-10-25: `agentconsole` still has the default password.
+* **Implementation**: (1) Fresh install: `setup/installer.php` creates the `agentconsole` row with a random password, and the three insert sites create a random one rather than `agentconsole`. No config file is needed, since every built-in reader takes the hash from the table. (2) Boxes installed by the script: the release's `patches/<VERSION>/update.sh`, run by `build/5.0/update-issabel-callcenter.sh`, replaces the password only where it is still `MD5('agentconsole')`, so one an admin set in ECCP Users is kept. The RPM is not distributed yet, so it needs nothing now. (3) `eccp-examples/*.php` hardcode `agentconsole`/`agentconsole`; have them take credentials as arguments.
+* **Status**: Untouched
 
 ### Attended-Transfer Hold Has No Orphan Check
 
@@ -76,6 +73,25 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Description**: Per review cycle the dialer places, for one campaign, `N = F + max(0, P - W) - D`, and `N = 0` when `F = 0` - where F is the idle agents allocated to the campaign (`AGENTES_LIBRES_LISTA`), P the busy agents the Erlang model expects to free within the answer window (`AGENTES_POR_DESOCUPAR`), W the callers waiting in the queue (`CLIENTES_ESPERA`; a caller stays counted until bridged, so a caller whose call is ringing an agent is in W), D the calls originated and not yet answered (pending originate), and R the queue members being rung with a waiting caller right now. The right count is `F + P - (W - R) - D`: each of the R ringing members is already matched to one of the W waiting callers. Since 5.3.27 a ringing member is not in F, but its caller is still subtracted inside W, so with busy agents about to free (P > 0) the dialer places up to R calls too few, and with F = 0 the eligibility gate places none at all even when P > 0 (before 5.3.27 a ringing member counted as idle kept the campaign eligible - two errors cancelling). Worked example: F = 1, R = 2, W = 2, P = 2 - the right count is 3, pre-5.3.27 gave 3 by cancellation, 5.3.27 gives 1. The exact version: `N = F + max(0, P - (W - Rq)) - D`, with the gate open while the campaign's queue has Rq > 0, where Rq counts members the QUEUE is ringing with a waiting caller (from AgentCalled until AgentConnect, AgentRingNoAnswer or the caller leaving, per queue; `QueueShadow::msg_AgentCalled` is a stub today) - not device RINGING, because a phone ringing with a personal call serves no waiting caller. Agent-type members never read RINGING (app_agent_pool publishes only UNAVAILABLE, NOT_INUSE and INUSE), so R is always 0 for them and their count is unchanged; a callback agent with an auto-answer phone rings for milliseconds against the 3 s cycle, so R is almost always 0 there too. Only callback agents who answer by hand are affected, and the error is on the safe side: too few calls, never abandoned ones.
 * **Status**: Untouched
 
+### ECCP User IP Restriction
+
+* **Type**: Security
+* **Urgency**: Low
+* **Date Added**: 2026-10-25
+* **Location**: `ECCPConn.class.php:382-384` (`Request_login`), `eccp_authorized_clients` (`call_center.sql`), `modules/eccp_users/`
+* **Description**: Let each ECCP user log in only from the addresses listed for it: `agentconsole` only from `127.0.0.1`/`::1`, a CRM's user only from the CRM server. Today `Request_login` checks the username and password alone, from any address. With the random password ("Default ECCP Console Password"), a leaked or default credential is then useless from anywhere else, and "ECCP Listen Address" matters less. Replaces the pre-2011 "ECCP Client Authorization" (which agents each ECCP user may serve), dropped 2026-10-25: every built-in console shares the one user `agentconsole`, so a per-user agent list restricted nothing, and each agent action is already checked against that agent's own `eccp_password` hash (`_hashValidoAgenteECCP()`).
+* **Implementation**: (1) An `allowed_ips` column in `eccp_authorized_clients`, empty meaning any address, so existing users keep working. (2) The client's address reaches the worker the way `appcookie` and `usuarioeccp` already do, in the per-connection `connvars` (`ECCPProxyConn.class.php:99-102`), and `Request_login` refuses an address not on the list. (3) The field on the ECCP Users page, labels through `_tr()`. (4) The schema change ships as idempotent SQL in the release's `update.sh`, and in `call_center.sql`/`installer.php` for fresh installs. (5) Fresh installs and updates set `agentconsole` to `127.0.0.1,::1`.
+* **Status**: Untouched
+
+### ECCP Listen Address
+
+* **Type**: Security
+* **Urgency**: Low
+* **Date Added**: 2026-10-25
+* **Location**: `ECCPProcess.class.php:132`, `dialerd.conf` (`[eccp]`)
+* **Description**: The dialer always listens on `0.0.0.0:20005`. That is on purpose, because ECCP is also for external applications (`ECCP_Protocol.md`; `ECCP_CERT_MODE=generate-san` exists for remote clients), but the built-in consoles need only `localhost`. Make it a setting in `dialerd.conf`'s `[eccp]` section: local only (`127.0.0.1`) or public (`0.0.0.0`). An update must keep a box's own value. **Open decision**: the default. Local only is safer; public keeps existing remote clients working.
+* **Status**: Untouched
+
 ### Schedule Call to Different Campaign
 
 * **Type**: Feature
@@ -85,13 +101,14 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Description**: Allow scheduled callbacks to be sent to a different campaign than the original call. Currently, scheduled callbacks use the same campaign as the original call (`id_campaign` is hardcoded from original call).
 * **Status**: Untouched
 
-### Configurable Dial Timeout
+### Configurable Scheduled-Call Reservation Window
 
 * **Type**: Feature
-* **Urgency**: Medium
+* **Urgency**: Low
 * **Date Added**: Original (pre-2011)
-* **Location**: `CampaignProcess.class.php:1891-1892`
-* **Description**: Make timeout (30 sec) configurable per campaign. Currently hardcoded in `_getSegundosReserva()`.
+* **Date Updated**: 2026-10-25
+* **Location**: `CampaignProcess.class.php:1692-1696` (`_getSegundosReserva()`)
+* **Description**: `_getSegundosReserva()` (reservation seconds) returns a fixed 30: how far ahead of a scheduled call's `time_init` the dialer reserves that call's agent. `_listarAgentesAgendadosReserva()` picks the agents whose scheduled call is due now or within the window, the reservation pauses them in every queue so no other call reaches them, and `_verificarFinLlamadasAgendables()` lifts it once the agent has no due or upcoming scheduled call. The in-code TODO asks for it to be configurable in the DB or per campaign. This is not the dial timeout, which this entry wrongly named until 2026-10-25: that one is already the "Per-call dial timeout" setting in Call Center Config (`dialer_timeout_originate`, global). At 0 the dialer leaves `Timeout` out of the Originate (`AMIClientConn` drops a NULL optional field), and Asterisk then uses its own default of 30000 ms (`int to = 30000` in `manager.c` `action_originate()`, 18.19.0 debugsource). The two 30s are unrelated: changing one does not move the other.
 * **Status**: Untouched
 
 ### Agent Status i18n
@@ -113,13 +130,21 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Description**: When a call is transferred between agents, `id_agent` in `calls`/`call_entry` is overwritten to the target agent. However, complete agent history IS preserved in `call_progress_log` with timeline tracking. The `transfer` column contains the target agent's extension number (not ID). Most reports only query `calls.id_agent` which shows the final agent; need to update reports to expose multi-agent call history from `call_progress_log`.
 * **Status**: Partially Solved (data exists in `call_progress_log`, UI needs improvement)
 
-### Auto-calculate History Window
+### Overcommit Answer-Ratio Window
 
-* **Type**: Feature
+* **Type**: Improvement
 * **Urgency**: Low
 * **Date Added**: Original (pre-2011)
-* **Location**: `CampaignProcess.class.php:1477-1478`
-* **Description**: Auto-calculate history window (30 min hardcoded).
+* **Date Updated**: 2026-10-25 (design decided)
+* **Location**: `CampaignProcess.class.php:1335-1384` (the overcommit block in `_processCampaignWithAllocation()`); the new setting in `ConfigDB.class.php` (definition and default, beside `overcommit`), `callcenter_config/index.php` (key map, default, form field), `paloSantoConfiguration.class.php` (default) and `callcenter_config/lang/*.lang`; `DIALER_LOGIC.md` "Enable Overcommit of Outgoing Calls"
+* **Today**: With overcommit on ("Enable overcommit of outgoing calls", `dialer.overcommit`, off by default), every review cycle (3 s, `INTERVALO_REVISION_CAMPANIAS`) counts the campaign's calls whose dial attempt ended in the last 30 minutes: `fecha_llamada` is stamped when Asterisk's Originate result arrives (`Llamada.class.php:796`), and `Placing` rows are left out. It counts numbers, not attempts: a retried number goes back to `Placing` with `fecha_llamada` cleared (`CampaignProcess.class.php:1508`) and drops out until its retry ends. With at least 10 counted calls, at least one of them answered, the ratio is answered ÷ counted. Answered is every status except `Failure` (never connected: busy, unreachable, rejected, or not answered within the dial timeout) and `NoAnswer` (connected, but hung up before reaching the queue), so `Ringing`, `OnQueue`, `Success`, `OnHold`, `ShortCall` and `Abandoned` all count. The calls to place are divided by `max(ratio, 0.20)` and capped at the effective channel limit. There is no start delay: the 30 minutes, hardcoded, is only how far back each calculation looks. The original TODO asked whether that window could be auto-calculated; its comment went with the dead `_actualizarLlamadasCampania()` in `e5285df` (2026-08-30), and the live copy from the 3-pass rewrite (`7818debd`, 2026-03-12) never carried it.
+* **Change**: Take the ratio from **the newest 100 calls that finished in the last X minutes**.
+  - **X** is a new setting on Call Center Config, next to "Enable overcommit of outgoing calls": minutes, default 30 (today's value), capped in the form (240, say) so it cannot reach back into the previous day's session. It is stored in `valor_config` like `dialer.overcommit`, with its label through `_tr()` in every `lang/*.lang`. A box without the row uses the default, so the update needs no SQL.
+  - **100** is fixed in the code, a literal in the SQL (a subquery ordered by `fecha_llamada DESC`). A ratio from n calls has a margin of about ±2·√(p(1−p)/n), which depends on n alone: at a 30% answer rate, ±29 points from 10 calls, ±13 from 50, ±9 from 100, ±5 from 400. Around 100 is where more calls stop helping much, the same for every campaign, so there is nothing per box to tune.
+  - **Start unchanged**: at least 10 counted calls in the sample, with no time delay.
+  - **Recalculated every cycle** (3 s), as today, and the calls to place with it. The cutoff time is computed in PHP, as now.
+* **Why both numbers**: The minutes keep the sample fresh, from the same time of day. As long as X is shorter than the overnight pause, nothing from yesterday is used: a 9:00-18:00 campaign starts each morning without overcommit and takes its first ratio from that morning's first 10 calls, never from yesterday's closing pace. The 100 calls keep a busy campaign quick to follow a sudden rise in the answer rate (a trunk back after an outage, retries giving way to fresh numbers). That is the dangerous direction: a 30-minute window holds the old, low ratio for up to 30 minutes, the dialer over-dials, and answered customers find no agent and are abandoned. A campaign finishing 100 calls in 5 minutes clears it in 5. A sudden drop errs on the safe side (fewer calls, idle agents). A slow campaign that finishes fewer than 100 calls in X minutes behaves exactly as today.
+* **Rejected**: (1) Starting each morning from yesterday's ratio at the same hour: it brings yesterday back (another part of the list, where today's retries answer less than yesterday's fresh numbers, and maybe another weekday) for more code, and this morning's calls are better data after a few minutes. Accepted cost: the first ratio each morning comes from 10 calls, as today. (2) Holding the ratio for 10 minutes between recalculations: it would lock in the roughest figure, the first from 10 calls, and make over-dialing after a sudden rise last longer.
 * **Status**: Untouched
 
 ### New Queue Appearance
@@ -197,24 +222,6 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Date Updated**: 2026-03-09
 * **Location**: `ECCPHelper.lib.php:121-123`, `leerAtributosContacto()`
 * **Description**: Architectural asymmetry between outgoing and incoming call attribute handling. Outgoing calls support dynamic custom attributes via `call_attribute` table (arbitrary `columna`/`value` pairs). Incoming calls are limited to hardcoded `contact` table fields (`name`, `apellido`, `telefono`, `cedula_ruc`, `origen`). No `call_entry_attribute` table exists. ECCP protocol sends `call_attributes` identically for both types, but incoming calls cannot receive custom attributes. Implementation would require: create `call_entry_attribute` table, modify `leerAtributosContacto()`, add ECCP write methods, update incoming campaign UI.
-* **Status**: Untouched
-
-### Contact Formatting
-
-* **Type**: Improvement
-* **Urgency**: Low
-* **Date Added**: Original (pre-2011)
-* **Location**: `agent_console/index.php:1060-1062, 2030-2032`
-* **Description**: Proper formatting for contact calls with arbitrary attributes.
-* **Status**: Untouched
-
-### Campaign Form Label
-
-* **Type**: Improvement
-* **Urgency**: Low
-* **Date Added**: Original (pre-2011)
-* **Location**: `agent_console/index.php:1409`
-* **Description**: Assign label from campaign form. Currently hardcoded to empty string.
 * **Status**: Untouched
 
 ### Agent List Dropdown
@@ -297,36 +304,6 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Date Updated**: 2026-03-09
 * **Location**: `paloSantoIncomingCampaign.class.php:468-469`
 * **Description**: Placeholder for future "contacts per campaign" feature in incoming campaigns. **Current architecture**: Incoming campaigns use **global** `contact` table shared across all campaigns (lookup by `call_entry.id_contact`). Outgoing campaigns have campaign-specific contacts via `calls` table. **TODO intent**: If incoming campaigns were given their own contact lists (like outgoing), the `delete_campaign()` function would need SQL to delete campaign-specific contacts (e.g., `DELETE FROM campaign_contact_entry WHERE id_campaign = ?`). **Note**: This is a design note for hypothetical future enhancement, not an active bug. Current global contact model works but has limitations: same phone number cannot have different attributes per campaign, no data isolation between campaigns.
-* **Status**: Untouched
-
-### ECCP Proxy
-
-* **Type**: Feature
-* **Urgency**: Low
-* **Date Added**: Original (pre-2011)
-* **Location**: `ECCPProxyConn.class.php:102-111`
-* **Description**: TODO proposes dedicated DB worker for AMI events. Current architecture: `ECCPWorkerProcess` pool handles both client ECCP requests and DB writes from `AMIEventProcess`. Hypothetical concern: busy pool could delay time-sensitive events or affect ordering. System has run since pre-2011 without issues; minimum 2 workers in pool. Low priority - no evidence of actual problems.
-* **Recommendation**: Remove TODO if monitoring confirms no latency issues. If needed, create separate `EventDBWorkerProcess` class.
-* **Status**: Untouched
-
-### Queue List in Monitoring
-
-* **Type**: Feature
-* **Urgency**: Low
-* **Date Added**: Original (pre-2011)
-* **Location**: `paloSantoConsola.class.php:1140-1143`, `SQLWorkerProcess.class.php:969`, `ECCPProxyConn.class.php:266-277`
-* **Description**: `agentloggedout` event only contains agent channel, not the queues they were logged into. Limits usefulness for monitoring consoles tracking queue membership changes. Compare with `queuemembership` event which includes `<queues>` list. Agent's queues available via `_listarTotalColasTrabajoAgente()` at logout time.
-* **Implementation**: (1) Get queue list in `SQLWorkerProcess._AgentLogoff()` before clearing state, (2) Pass queues with `AgentLogoff` event, (3) Update `ECCPProxyConn.notificarEvento_AgentLogoff()` to include queues in XML, (4) Handle queues in `paloSantoConsola` `agentloggedout` case.
-* **Status**: Untouched
-
-### Monitoring Implementation
-
-* **Type**: Feature
-* **Urgency**: Low
-* **Date Added**: Original (pre-2011)
-* **Date Updated**: 2026-03-09
-* **Location**: `paloSantoConsola.class.php:1132-1143`
-* **Description**: ECCP login/logout events not parsed for monitoring console. **Issue**: The dialer sends `agentloggedin`, `agentfailedlogin`, and `agentloggedout` events via ECCP, but `paloSantoConsola::esperarEventoSesionActiva()` returns **empty events** (just `break`). **Impact**: Monitoring modules (`rep_agents_monitoring`, `rep_incoming_calls_monitoring`) cannot show real-time login/logout/fail events; rely on periodic `getstatus` polling instead. **Two instances**: (1) `agentloggedin` (line 1132-1135) - should return agent_number, queues[], session_start, (2) `agentfailedlogin` (line 1136-1139) - should return agent_number, reason. Also `agentloggedout` (line 1140-1143) partially implemented but missing queue list. **Implementation requires**: Parse event XML from `$evt`, populate `$evento` array with fields, verify ECCP server sends data.
 * **Status**: Untouched
 
 ### Mid-Call Logoff Hangup Target
