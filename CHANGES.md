@@ -7,6 +7,10 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.4.36
+
+- Bug fix: a scheduled call whose window passes before it is dialed is closed as Failure with the reason "Scheduled call expired" within one 3-second cycle, instead of staying without a status forever and missing from the campaign's CSV download
+
 ## 5.4.35
 
 - Bug fix: campaign finish ignores rows the dialer can never dial (a callback window that passed, an agent row with no window), so the campaign reaches Finished instead of staying Active until its end date

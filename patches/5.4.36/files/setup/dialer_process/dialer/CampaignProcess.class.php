@@ -533,6 +533,10 @@ class CampaignProcess extends TuberiaProcess
             // Limpiar llamadas conectadas huérfanas (basado en timeout)
             $this->_cleanOrphanedConnectedCalls();
 
+            // Settle undialed calls whose dialing window has passed
+            // Cerrar llamadas no marcadas cuya ventana de marcado pasó
+            $this->_settleExpiredWindowCalls();
+
             $sFecha = date('Y-m-d', $iTimestamp);
             $sHora = date('H:i:s', $iTimestamp);
             $listaCampanias = array(
@@ -2256,6 +2260,37 @@ PETICION_LLAMADAS_AGENTE;
                 . "(older than " . ($iConnectedTimeout / 3600) . " hours) | "
                 . "limpiadas $iCleaned llamadas conectadas huérfanas "
                 . "(más antiguas de " . ($iConnectedTimeout / 3600) . " horas)");
+        }
+    }
+
+    /**
+     * Cerrar las llamadas agendadas no marcadas cuya ventana de marcado ya
+     * pasó: la fila no puede volver a marcarse, así que se liquida como
+     * Failure con un motivo en lugar de quedar NULL para siempre (invisible
+     * en el CSV de la campaña).
+     * EN: settle the undialed scheduled calls whose dialing window has
+     * passed: the row can never be dialed again, so it is closed as a
+     * Failure with a reason instead of staying NULL forever (invisible in
+     * the campaign's CSV).
+     */
+    private function _settleExpiredWindowCalls()
+    {
+        $sFechaSys = date('Y-m-d');
+        $sHoraSys = date('H:i:s');
+
+        $sPeticion = "UPDATE calls SET status = 'Failure', failure_cause = 0, "
+            . "failure_cause_txt = 'Scheduled call expired' "
+            . "WHERE status IS NULL AND dnc = 0 "
+            . "AND date_init IS NOT NULL AND date_end IS NOT NULL "
+            . "AND time_init IS NOT NULL AND time_end IS NOT NULL "
+            . "AND (date_end < ? OR (date_end = ? AND time_end < ?))";
+        $sth = $this->_db->prepare($sPeticion);
+        $sth->execute(array($sFechaSys, $sFechaSys, $sHoraSys));
+        $iSettled = $sth->rowCount();
+
+        if ($iSettled > 0) {
+            $this->_log->output("INFO: settled $iSettled undialed scheduled call(s) whose window passed | "
+                . "cerradas $iSettled llamada(s) agendada(s) no marcada(s) cuya ventana pasó");
         }
     }
 
