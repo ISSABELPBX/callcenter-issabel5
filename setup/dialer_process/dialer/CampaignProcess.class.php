@@ -113,6 +113,12 @@ class CampaignProcess extends TuberiaProcess
      * Agentes asignados después de la resolución de rotación */
     private $_allocatedAgents = array();  // [campaign_id => [agent1, agent2, ...]]
 
+    /* Agentes reservados por el pre-paso de llamadas agendadas de este ciclo:
+     * a ninguno de ellos puede asignarse una campaña este ciclo.
+     * EN: agents reserved by this cycle's scheduled-call pre-pass: no campaign
+     * may be allocated any of them this cycle. */
+    private $_reservadosCiclo = array();  // [agent1, agent2, ...]
+
     /* Campaign max_canales limits for current cycle
      * Límites max_canales de campaña para el ciclo actual */
     private $_campaignMaxCanales = array();  // [campaign_id => effective_max_canales]
@@ -670,6 +676,24 @@ PETICION_CAMPANIAS_ENTRANTES;
              * later due to a DB exception. */
             $this->_iTimestampUltimaRevisionCampanias = time();
 
+            /* Reservar aquí a los agentes con una llamada agendada dentro de la
+             * ventana de reserva, antes de leer la lista de agentes libres de
+             * cualquier campaña: un agente reservado pertenece a su llamada
+             * agendada, y la pausa de la cola solo llega a esa lista un ciclo
+             * después.
+             * EN: reserve here the agents with a scheduled call due within the
+             * reservation window, before any campaign's free-agent list is
+             * read: a reserved agent belongs to its scheduled call, and the
+             * queue's Paused flag reaches that list only a cycle later. */
+            $agendablesCiclo = array();
+            foreach ($listaCampanias['outgoing'] as $campaignData) {
+                foreach ($this->_listarAgentesAgendadosReserva($campaignData['id']) as $sAgente)
+                    $agendablesCiclo[$sAgente] = TRUE;
+            }
+            $this->_reservadosCiclo = array();
+            if (count($agendablesCiclo) > 0)
+                $this->_reservadosCiclo = $this->_tuberia->AMIEventProcess_agentesAgendables(array_keys($agendablesCiclo));
+
             // ============================================================
             // PASS 1: Collect campaign intentions (which agents they want)
             // PASO 1: Recopilar intenciones de campaña (qué agentes quieren)
@@ -719,7 +743,14 @@ PETICION_CAMPANIAS_ENTRANTES;
                             $tmp = $this->_compat->normalizeAgentFromInterface($agentInterface);
                             if (!is_null($tmp)) $normalizedAgent = $tmp;
                         }
-                        $normalizedAgents[] = $normalizedAgent;
+                        // Un agente reservado para una llamada agendada no se
+                        // ofrece a ninguna campaña: la pausa de la cola tarda
+                        // un ciclo en llegar a esta lista.
+                        // EN: an agent reserved for a scheduled call is offered
+                        // to no campaign: the queue's pause takes a cycle to
+                        // reach this list.
+                        if (!in_array($normalizedAgent, $this->_reservadosCiclo))
+                            $normalizedAgents[] = $normalizedAgent;
                     }
                     $this->_campaignIntentions[$campaignData['id']] = $normalizedAgents;
 
@@ -787,6 +818,12 @@ PETICION_CAMPANIAS_ENTRANTES;
                  * later due to a DB exception. */
                 $this->_iTimestampUltimaRevisionCampanias = time();
             }
+
+            /* Liberar las reservas que ya no tienen ninguna llamada agendable:
+             * corre en cada ciclo de revisión, aunque no haya campañas.
+             * EN: release the reservations with no schedulable call left: runs
+             * on every review cycle, even with no campaigns. */
+            $this->_liberarReservasHuerfanas();
         }
     }
 
@@ -1223,7 +1260,23 @@ PETICION_CAMPANIAS_ENTRANTES;
         $numAllocatedAgents = count($allocatedAgents);
         $this->_log->output("DEBUG: ".__METHOD__." campaign $campaignId: allocated $numAllocatedAgents agents: [".implode(',', $allocatedAgents)."] | campaña $campaignId: $numAllocatedAgents agentes asignados: [".implode(',', $allocatedAgents)."]");
 
-        if ($numAllocatedAgents == 0) {
+        // Build trunk dial pattern / Construir patrón de marcado de troncal
+        $datosTrunk = $this->_construirPlantillaMarcado($infoCampania['trunk']);
+        if (is_null($datosTrunk)) {
+            $this->_log->output("ERR: no se puede construir plantilla de marcado a partir de trunk '{$infoCampania['trunk']}'! | EN: cannot build dial template from trunk '{$infoCampania['trunk']}'!");
+            return FALSE;
+        }
+
+        /* Leer y colocar las llamadas agendadas vencidas ANTES de la salida
+         * por no tener agentes: una llamada agendada vencida se coloca aunque
+         * este ciclo no haya asignado agentes, porque marca a su propio agente
+         * directamente y no ocupa ningún agente de la cola.
+         * EN: read and place the due scheduled calls BEFORE the no-agents
+         * exit: a due scheduled call is placed whatever this cycle allocated,
+         * because it dials its own agent directly and takes no queue agent. */
+        // Get schedulable calls / Obtener llamadas programables
+        $listaLlamadasAgendadas = $this->_actualizarLlamadasAgendables($infoCampania, $datosTrunk);
+        if ($numAllocatedAgents == 0 && count($listaLlamadasAgendadas) <= 0) {
             if ($this->DEBUG) {
                 $this->_log->output("DEBUG: ".__METHOD__.
                     " (campaign $campaignId queue {$infoCampania['queue']}) no agents allocated this cycle | ".
@@ -1234,16 +1287,6 @@ PETICION_CAMPANIAS_ENTRANTES;
             $this->_checkCampaignDataExhausted($campaignId, $infoCampania);
             return FALSE;
         }
-
-        // Build trunk dial pattern / Construir patrón de marcado de troncal
-        $datosTrunk = $this->_construirPlantillaMarcado($infoCampania['trunk']);
-        if (is_null($datosTrunk)) {
-            $this->_log->output("ERR: no se puede construir plantilla de marcado a partir de trunk '{$infoCampania['trunk']}'! | EN: cannot build dial template from trunk '{$infoCampania['trunk']}'!");
-            return FALSE;
-        }
-
-        // Get schedulable calls / Obtener llamadas programables
-        $listaLlamadasAgendadas = $this->_actualizarLlamadasAgendables($infoCampania, $datosTrunk);
 
         // Retrieve effective max_canales computed in Pass 1 (already accounts for active calls)
         // Obtener max_canales efectivo calculado en Paso 1 (ya toma en cuenta llamadas activas)
@@ -1283,7 +1326,14 @@ PETICION_CAMPANIAS_ENTRANTES;
         // estas llamadas pendientes del conteo de agentes para evitar marcar a agentes que ya están siendo llamados.
         $iPendingOriginate = $this->_contarLlamadasEsperandoRespuesta($infoCampania['queue']);
         $iScheduledThisCycle = count($listaLlamadasAgendadas);
-        $iAgentBudget = $iNumLlamadasColocar - $iPendingOriginate - $iScheduledThisCycle;
+        /* Una llamada agendada marca a su propio agente directamente y no
+         * ocupa ningún agente de la cola, así que ya no se resta del
+         * presupuesto de agentes; el presupuesto de canales sí la sigue
+         * restando.
+         * EN: a scheduled call dials its own agent directly and takes no queue
+         * agent, so it is no longer subtracted from the agent budget; the
+         * channel budget still subtracts it. */
+        $iAgentBudget = $iNumLlamadasColocar - $iPendingOriginate;
         if ($iAgentBudget < 0) $iAgentBudget = 0;
 
         // Budget 2 (Channel): How many more channels can this campaign use
@@ -1307,6 +1357,7 @@ PETICION_CAMPANIAS_ENTRANTES;
             "TWO-BUDGET: allocated=$numAllocatedAgents [".implode(',', $allocatedAgents)."], ".
             "predictive_boost=$iPredictiveBoost, ".
             "pending_originate=$iPendingOriginate, scheduled_this_cycle=$iScheduledThisCycle, ".
+            "reserved_idle=".count($this->_reservadosCiclo).", ".
             "agent_budget=$iAgentBudget, channel_budget=$iChannelBudget, ".
             "effective_max=$effectiveMaxCanales, ".
             "calls_to_place=$iNumLlamadasColocar | ".
@@ -1314,6 +1365,7 @@ PETICION_CAMPANIAS_ENTRANTES;
             "DOS-PRESUPUESTOS: asignados=$numAllocatedAgents, ".
             "impulso_predictivo=$iPredictiveBoost, ".
             "pendientes_originate=$iPendingOriginate, agendadas_ciclo=$iScheduledThisCycle, ".
+            "reservados_ciclo=".count($this->_reservadosCiclo).", ".
             "presupuesto_agentes=$iAgentBudget, presupuesto_canales=$iChannelBudget, ".
             "max_efectivo=$effectiveMaxCanales, ".
             "llamadas_a_colocar=$iNumLlamadasColocar");
@@ -1446,29 +1498,13 @@ PETICION_LLAMADAS;
         }
 
         if ($iNumTotalLlamadas <= 0) {
-            // Check if there are scheduled calls outside the time window
-            $sPeticionTotal =
-                'SELECT COUNT(*) AS N FROM calls '.
-                'WHERE id_campaign = ? '.
-                    'AND (status IS NULL OR status NOT IN ("Success", "Placing", "Ringing", "OnQueue", "OnHold")) '.
-                    'AND retries < ? '.
-                    'AND dnc = 0';
-            $recordset = $this->_db->prepare($sPeticionTotal);
-            $recordset->execute(array($campaignId, $infoCampania['retries']));
-            $iNumTotal = $recordset->fetch(PDO::FETCH_COLUMN, 0);
-            $recordset->closeCursor();
-            if (!is_null($iNumTotal) && $iNumTotal > 0) {
-                if ($this->DEBUG) {
-                    $this->_log->output("DEBUG: ".__METHOD__." (campaign $campaignId ".
-                        "queue {$infoCampania['queue']}) no calls to ".
-                        "place; $iNumTotal scheduled calls but outside ".
-                        "time range. | (campaña $campaignId ".
-                        "cola {$infoCampania['queue']}) no hay llamadas a ".
-                        "colocar; $iNumTotal llamadas agendadas pero fuera de ".
-                        "horario.");
-                }
-                return FALSE;
-            }
+            /* Nothing to place this cycle. Whether the campaign may finish
+             * is _checkCampaignDataExhausted()'s one rule: calls still up,
+             * or rows still dialable now or later, keep it Active.
+             * Nada que colocar en este ciclo. Si la campaña puede terminar
+             * lo decide la única regla de _checkCampaignDataExhausted(). */
+            $this->_checkCampaignDataExhausted($campaignId, $infoCampania);
+            return FALSE;
         }
 
         // Check DNC list / Verificar lista DNC
@@ -1596,13 +1632,6 @@ SQL_LLAMADA_COLOCADA;
                 (isset($datosTrunk['CID']) ? $datosTrunk['CID'] : $tupla['phone']),
                 $sCadenaVar, (is_null($tupla['retries']) ? 0 : $tupla['retries']) + 1,
                 $infoCampania['trunk']);
-        }
-
-        // Mark campaign as finished if no more calls
-        if ($iNumLlamadasColocar > 0 && $iNumTotalLlamadas <= 0) {
-            $this->_log->output('INFO: marking campaign as finished: '.$campaignId.' | marcando campaña como finalizada: '.$campaignId);
-            $sth = $this->_db->prepare('UPDATE campaign SET estatus = "T" WHERE id = ?');
-            $sth->execute(array($campaignId));
         }
 
         return TRUE;
@@ -2266,16 +2295,31 @@ PETICION_LLAMADAS_AGENTE;
             return; // Still have calls in progress, don't mark as finished
         }
 
-        // Check if there are any remaining callable records (regardless of time window)
-        // Verificar si quedan registros marcables (sin importar ventana de tiempo)
+        // Verificar si quedan registros marcables: una fila cuenta sólo si el
+        // marcador todavía puede marcarla, ahora o más tarde - sin ventana y
+        // sin agente (una fila de CSV), o una ventana completa aún no vencida.
+        // Una ventana que ya pasó se deja ir: el marcador no puede volver a
+        // marcarla, así que ya no mantiene la campaña abierta.
+        // Check if there are any remaining callable records: a row counts
+        // only when the dialer can still dial it, now or later - no window
+        // and no agent (a CSV row), or a full window not yet over. A window
+        // that has passed is let go: the dialer can never dial it again, so
+        // it no longer keeps the campaign open.
+        $sFechaSys = date('Y-m-d');
+        $sHoraSys = date('H:i:s');
         $sPeticion =
             'SELECT COUNT(*) FROM calls '.
             'WHERE id_campaign = ? '.
                 'AND (status IS NULL OR status NOT IN ("Success", "Placing", "Ringing", "OnQueue", "OnHold")) '.
                 'AND retries < ? '.
-                'AND dnc = 0';
+                'AND dnc = 0 '.
+                'AND ((date_init IS NULL AND date_end IS NULL AND time_init IS NULL AND time_end IS NULL '.
+                    'AND agent IS NULL) '.
+                'OR (date_init IS NOT NULL AND date_end IS NOT NULL AND time_init IS NOT NULL AND time_end IS NOT NULL '.
+                    'AND (date_end > ? OR (date_end = ? AND time_end >= ?))))';
         $recordset = $this->_db->prepare($sPeticion);
-        $recordset->execute(array($campaignId, $infoCampania['retries']));
+        $recordset->execute(array($campaignId, $infoCampania['retries'],
+            $sFechaSys, $sFechaSys, $sHoraSys));
         $iNumRemaining = $recordset->fetch(PDO::FETCH_COLUMN, 0);
         $recordset->closeCursor();
 
@@ -2284,6 +2328,10 @@ PETICION_LLAMADAS_AGENTE;
                 ' | datos de campaña agotados, marcando como finalizada: '.$campaignId);
             $sth = $this->_db->prepare('UPDATE campaign SET estatus = "T" WHERE id = ? AND estatus = "A"');
             $sth->execute(array($campaignId));
+        } elseif ($this->DEBUG) {
+            $this->_log->output("DEBUG: ".__METHOD__." campaign $campaignId still has ".
+                "$iNumRemaining dialable row(s), stays Active | campaña $campaignId ".
+                "aún tiene $iNumRemaining fila(s) marcable(s), sigue Activa");
         }
     }
 
@@ -2323,6 +2371,71 @@ PETICION_LLAMADAS_AGENTE;
         $this->_log->output('INFO: recibido mensaje de finalización, se detienen campañas... | EN: received shutdown message, stopping campaigns...');
         $this->_tuberia->msg_HubProcess_finalizacionTerminada();
         $this->_finalizandoPrograma = TRUE;
+    }
+
+    /**************************************************************************/
+
+    /**
+     * Liberar las reservas cuya llamada agendada ya no se puede colocar: el
+     * agente entró en pausa antes de la ventana, la campaña dejó de estar
+     * activa, o la fila se editó a mano. Una llamada agendada en vuelo nunca
+     * se toca: _agentesReservados() solo reporta agentes sin llamada.
+     * Release the reservations whose scheduled call can no longer be placed:
+     * the agent went on a break through the window, the campaign stopped
+     * being active, or the row was edited by hand. A scheduled call in flight
+     * is never touched: _agentesReservados() only reports agents with no call.
+     */
+    private function _liberarReservasHuerfanas()
+    {
+        $reservados = $this->_tuberia->AMIEventProcess_agentesReservados();
+        if (!is_array($reservados) || count($reservados) <= 0) return;
+        $agendados = $this->_listarAgentesAgendadosReservaTodos();
+        foreach ($reservados as $sAgente) {
+            if (!in_array($sAgente, $agendados)) {
+                $this->_log->output('INFO: reservation released: no schedulable call left for agent '.$sAgente.' | reserva liberada: no queda llamada agendable para el agente '.$sAgente);
+                $this->_tuberia->msg_AMIEventProcess_quitarReservaAgente($sAgente);
+            }
+        }
+    }
+
+    /**
+     * Función para listar todos los agentes que tengan al menos una llamada
+     * agendada, ahora, o en los siguientes RESERVA segundos, en cualquier
+     * campaña activa.
+     * Function to list all agents that have at least one scheduled call, now,
+     * or in the next RESERVA seconds, in any active campaign.
+     *
+     * @return array    Lista de agentes
+     *                  List of agents
+     */
+    private function _listarAgentesAgendadosReservaTodos()
+    {
+        $iSegReserva = $this->_getSegundosReserva(NULL);
+        $sFechaSys = date('Y-m-d');
+        $iTimestamp = time();
+        $sHoraInicio = date('H:i:s', $iTimestamp);
+        $sHoraFinal = date('H:i:s', $iTimestamp + $iSegReserva);
+
+        // Listar todos los agentes que tienen alguna llamada agendada dentro del horario
+        // List all agents that have a scheduled call within the time range
+        $sPeticionAgentesAgendados = <<<PETICION_AGENTES_AGENDADOS_TODOS
+SELECT DISTINCT agent FROM calls, campaign
+WHERE (calls.status IS NULL OR calls.status NOT IN ("Success", "Placing", "Ringing", "OnQueue", "OnHold"))
+    AND calls.dnc = 0
+    AND calls.date_init <= ? AND calls.date_end >= ? AND calls.time_init <= ? AND calls.time_end >= ?
+    AND calls.retries < campaign.retries
+    AND calls.id_campaign = campaign.id
+    AND calls.agent IS NOT NULL
+    AND campaign.estatus = "A"
+PETICION_AGENTES_AGENDADOS_TODOS;
+        $recordset = $this->_db->prepare($sPeticionAgentesAgendados);
+        $recordset->execute(array(
+            $sFechaSys,
+            $sFechaSys,
+            $sHoraFinal,
+            $sHoraInicio));
+        $listaAgentes = $recordset->fetchAll(PDO::FETCH_COLUMN, 0);
+        return $listaAgentes;
     }
 
     /**************************************************************************/

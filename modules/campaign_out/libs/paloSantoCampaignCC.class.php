@@ -82,17 +82,26 @@ class paloSantoCampaignCC
             $this->errMsg = _tr("Campaign ID is not valid");
             return FALSE;
         }
+        /* Llamadas pendientes: solo filas nunca marcadas que el marcador aún
+         * pueda marcar, por la regla de _checkCampaignDataExhausted() (una
+         * ventana vencida, una fila con agente sin ventana o una fila DNC ya
+         * no es una llamada pendiente). EN: Pending calls: only never-dialled
+         * rows the dialer can still dial, by _checkCampaignDataExhausted()'s
+         * rule (a passed window, an agent row with no window or a DNC row is
+         * no longer a pending call). */
         $sPeticionSQL = <<<SQL_SELECT_CAMPAIGNS
 SELECT c.id, c.name, c.trunk, c.context, c.queue, c.datetime_init, c.datetime_end, c.daytime_init,
     c.daytime_end, c.script, c.retries, c.promedio,
     (SELECT COUNT(*) FROM calls WHERE id_campaign = c.id AND status = 'Success') AS num_completadas,
     (SELECT COUNT(*) FROM calls WHERE id_campaign = c.id) AS total_calls,
-    (SELECT COUNT(*) FROM calls WHERE id_campaign = c.id AND status IS NULL) AS pending_calls,
+    (SELECT COUNT(*) FROM calls WHERE id_campaign = c.id AND status IS NULL AND dnc = 0 AND ((date_init IS NULL AND date_end IS NULL AND time_init IS NULL AND time_end IS NULL AND agent IS NULL) OR (date_init IS NOT NULL AND date_end IS NOT NULL AND time_init IS NOT NULL AND time_end IS NOT NULL AND (date_end > ? OR (date_end = ? AND time_end >= ?))))) AS pending_calls,
     c.estatus, c.max_canales, c.id_url, c.id_url2, c.id_url3
 FROM campaign c
 SQL_SELECT_CAMPAIGNS;
         $paramWhere = array();
-        $paramSQL = array();
+        // The pending_calls subquery sits in the SELECT list, before any WHERE
+        // or LIMIT parameter, so its three window values bind first.
+        $paramSQL = array(date('Y-m-d'), date('Y-m-d'), date('H:i:s'));
 
         if (in_array($estatus, array('A', 'I', 'T'))) {
         	$paramWhere[] = 'c.estatus = ?';

@@ -268,11 +268,13 @@ Agent's queue membership changed.
 <request id="1">
     <login>
         <username>agentconsole</username>
-        <password>agentconsole</password>
+        <password>the-client-password</password>
     </login>
 </request>
 ```
-Response includes `app_cookie` for authentication.
+The password is the client's own, as set in Call Center → ECCP Users (the
+box ships no default); its md5 hash is accepted too. Response includes
+`app_cookie` for authentication.
 
 #### logout
 Terminates session and closes TCP connection.

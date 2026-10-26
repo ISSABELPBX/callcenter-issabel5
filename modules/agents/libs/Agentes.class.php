@@ -706,14 +706,20 @@ class Agentes
         try {
             require_once 'modules/agent_console/libs/ECCP.class.php';
             $sUsernameECCP = 'agentconsole';
-            $sPasswordECCP = 'agentconsole';
+            /* Contraseña aleatoria por instalación: nadie necesita el texto
+             * claro, porque el hash mismo se inserta y se envía, y
+             * Request_login lo acepta (md5_password = ?).
+             * EN: Random password per install: nobody needs the plaintext,
+             * because the hash itself is inserted and sent, and Request_login
+             * accepts it (md5_password = ?). */
+            $sPasswordECCP = md5(random_bytes(32));
             $md5_passwd = $this->_DB->getFirstRowQuery(
                 'SELECT md5_password FROM eccp_authorized_clients WHERE username = ?',
                 TRUE, array($sUsernameECCP));
             if (is_array($md5_passwd)) {
                 if (count($md5_passwd) <= 0) {
                     $this->_DB->genQuery(
-                        'INSERT INTO eccp_authorized_clients (username, md5_password) VALUES(?, md5(?))',
+                        'INSERT INTO eccp_authorized_clients (username, md5_password) VALUES(?, ?)',
                         array($sUsernameECCP, $sPasswordECCP));
                 } else {
                     $sPasswordECCP = $md5_passwd['md5_password'];
