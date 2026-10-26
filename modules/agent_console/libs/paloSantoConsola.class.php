@@ -78,7 +78,13 @@ class PaloSantoConsola
             if (!is_null($this->_eccp)) return $this->_eccp;
 
             $sUsernameECCP = 'agentconsole';
-            $sPasswordECCP = 'agentconsole';
+            // Contraseña aleatoria por instalación: nadie necesita el texto
+            // claro, porque el hash mismo se inserta y se envía, y
+            // Request_login lo acepta (md5_password = ?).
+            // EN: Random password per install: nobody needs the plaintext,
+            // because the hash itself is inserted and sent, and Request_login
+            // accepts it (md5_password = ?).
+            $sPasswordECCP = md5(random_bytes(32));
 
             // Verificar si existe la contraseña de ECCP, e insertar si necesario
             // EN: Verify if ECCP password exists, and insert if necessary
@@ -89,7 +95,7 @@ class PaloSantoConsola
             if (is_array($md5_passwd)) {
                 if (count($md5_passwd) <= 0) {
                     $dbConnCC->genQuery(
-                        'INSERT INTO eccp_authorized_clients (username, md5_password) VALUES(?, md5(?))',
+                        'INSERT INTO eccp_authorized_clients (username, md5_password) VALUES(?, ?)',
                         array($sUsernameECCP, $sPasswordECCP));
                 } else {
                     $sPasswordECCP = $md5_passwd['md5_password'];
@@ -98,8 +104,6 @@ class PaloSantoConsola
 
             $oECCP = new ECCP();
 
-            // TODO: configurar credenciales
-            // EN: TODO: configure credentials
             $cr = $oECCP->connect("localhost", $sUsernameECCP, $sPasswordECCP);
             if (isset($cr->failure)) {
                 throw new ECCPUnauthorizedException(_tr('Failed to authenticate to ECCP').': '.((string)$cr->failure->message));

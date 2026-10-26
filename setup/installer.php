@@ -210,6 +210,59 @@ if ($bBaseLista) {
         ccStepFail("could not backfill the agents' ECCP passwords - ".$pDB->errMsg." | Es: no se pudieron rellenar las contraseñas ECCP de los agentes");
     }
 
+    /* El cliente ECCP de la consola nunca queda con la contraseña de
+     * fábrica: se crea con una aleatoria donde falta, y se reemplaza sólo
+     * donde aún vale MD5('agentconsole') - una que un administrador fijó es
+     * otro hash y no se toca. El reemplazo sana también una base migrada
+     * desde la edición comunitaria (Pro) o una reinstalación sobre una base
+     * conservada. Nadie necesita el texto claro: la consola lee el hash de
+     * la tabla y lo envía, y Request_login lo acepta. El hash nunca se
+     * imprime. */
+    /* The console's ECCP client is never left with the shipped default
+     * password: it is created with a random one where missing, and replaced
+     * only where it still equals MD5('agentconsole') - one an administrator
+     * set is a different hash and is never touched. The replacement also
+     * heals a database migrated from the community edition (Pro), or a
+     * reinstall over a kept database. Nobody needs the plaintext: the
+     * console reads the hash from the table and sends it, and Request_login
+     * accepts it. The hash is never printed. */
+    $sHashConsola = md5(random_bytes(32));
+    $nReemplazos = $pDB->getFirstRowQuery(
+        "SELECT COUNT(*) FROM eccp_authorized_clients WHERE username = 'agentconsole' AND md5_password = MD5('agentconsole')",
+        FALSE);
+    if (!is_array($nReemplazos)) {
+        ccStepFail("could not read the agentconsole ECCP client - ".$pDB->errMsg." | Es: no se pudo leer el cliente ECCP agentconsole");
+    } else {
+        if (!$pDB->genQuery(
+            "UPDATE eccp_authorized_clients SET md5_password = ? WHERE username = 'agentconsole' AND md5_password = MD5('agentconsole')",
+            array($sHashConsola))) {
+            ccStepFail("could not replace the default agentconsole ECCP password - ".$pDB->errMsg." | Es: no se pudo reemplazar la contraseña ECCP de fábrica de agentconsole");
+        } elseif ($nReemplazos[0] > 0) {
+            fputs(STDERR, "INFO: replaced the still-default agentconsole ECCP password with a random one | Es: se reemplazó la contraseña ECCP de fábrica de agentconsole por una aleatoria\n");
+        }
+    }
+    $nFilaConsola = $pDB->getFirstRowQuery(
+        "SELECT COUNT(*) FROM eccp_authorized_clients WHERE username = 'agentconsole'",
+        FALSE);
+    if (!is_array($nFilaConsola)) {
+        ccStepFail("could not read the agentconsole ECCP client - ".$pDB->errMsg." | Es: no se pudo leer el cliente ECCP agentconsole");
+    } elseif ($nFilaConsola[0] <= 0) {
+        if (!$pDB->genQuery(
+            "INSERT INTO eccp_authorized_clients (username, md5_password) SELECT 'agentconsole', ? FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM eccp_authorized_clients WHERE username = 'agentconsole')",
+            array($sHashConsola))) {
+            ccStepFail("could not create the agentconsole ECCP client with a random password - ".$pDB->errMsg." | Es: no se pudo crear el cliente ECCP agentconsole con una contraseña aleatoria");
+        } else {
+            fputs(STDERR, "INFO: created the agentconsole ECCP client with a random password | Es: se creó el cliente ECCP agentconsole con una contraseña aleatoria\n");
+        }
+    } elseif (is_array($nReemplazos) && $nReemplazos[0] <= 0) {
+        // La fila existía y no era la de fábrica: ya se informó arriba sólo
+        // cuando se reemplazó, así que éste es el resultado "kept".
+        // EN: The row existed and was not the shipped default: "replaced"
+        // was reported above only when a replacement happened, so this is
+        // the "kept" outcome.
+        fputs(STDERR, "INFO: the agentconsole ECCP password is not the shipped default - left untouched | Es: la contraseña ECCP de agentconsole no es la de fábrica - no se toca\n");
+    }
+
     $pDB->disconnect();
 }
 

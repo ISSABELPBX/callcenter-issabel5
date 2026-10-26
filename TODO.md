@@ -10,16 +10,6 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 
 ## Medium
 
-### Default ECCP Console Password
-
-* **Type**: Security
-* **Urgency**: Medium
-* **Date Added**: 2026-10-25
-* **Location**: `paloSantoConsola.class.php:80-97` (`_obtenerConexion('ECCP')`), `paloSantoConsola.class.php:101-102` (the in-code TODO "configure credentials"), `agents/libs/Agentes.class.php:704-720` and `cb_extensions/libs/Agentes.class.php:264-280` (`_refreshDialerAgentList()`), `ECCPConn.class.php:382-384` (`Request_login`)
-* **Description**: Every install has the ECCP user `agentconsole` with the well-known password `agentconsole`: the three GUI sites above insert it when the row is missing. The listener is reachable from the network ("ECCP Listen Address"), so anyone who can reach the port can log in and use every `eccpauth` request: `getcallinfo` (customer number and attributes), campaign and queue status, and the event stream. Agent actions still need that agent's own `eccp_password` hash. The built-in consoles never send the plaintext: the browser talks to Apache, and PHP connects to `localhost`, reads `md5_password` from the table and sends the hash itself, which `Request_login` accepts (`md5_password = ?`). Measured on the dev box 2026-10-25: `agentconsole` still has the default password.
-* **Implementation**: (1) Fresh install: `setup/installer.php` creates the `agentconsole` row with a random password, and the three insert sites create a random one rather than `agentconsole`. No config file is needed, since every built-in reader takes the hash from the table. (2) Boxes installed by the script: the release's `patches/<VERSION>/update.sh`, run by `build/5.0/update-issabel-callcenter.sh`, replaces the password only where it is still `MD5('agentconsole')`, so one an admin set in ECCP Users is kept. The RPM is not distributed yet, so it needs nothing now. (3) `eccp-examples/*.php` hardcode `agentconsole`/`agentconsole`; have them take credentials as arguments.
-* **Status**: Untouched
-
 ### Attended-Transfer Hold Has No Orphan Check
 
 * **Type**: Bug
@@ -29,30 +19,48 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Description**: `[atxfer-hold]` is a bare `MusicOnHold(,1800)` with no check that the agent who put the caller there still exists, so any path that ever leaves a caller in it means up to 30 minutes of music with nobody on the other end. Change #70 removed the one known such path (the `Bridge()` thread race) and added a `SoftHangup` backstop inside `[atxfer-rebridge]`, but the context itself is still a dead end: the residual exposure is a caller orphaned during the ~2 s reconnect window, or by any future path. The `1800` is also now out of step with the 900 s hold cap the `callcenter_hold` parking lot got in Change #69. Proposed fix: have the dialer `SetVar` the agent's channel name onto the client channel at both `Redirect` sites in `ECCPConn::Request_agentauth_atxfercall()`, then run the hold as chunked `MusicOnHold` slices that bail out via `CHANNEL_EXISTS()` once that channel is gone. `res_musiconhold` restores the saved position for `mode=files` classes, so chunking does not restart the music. Deferred from Change #70 to keep that fix to a single file.
 * **Status**: Untouched
 
-### Campaign Finish Check Disagrees With the Dial Query
-
-* **Type**: Bug
-* **Urgency**: Medium
-* **Date Added**: 2026-09-22
-* **Location**: `CampaignProcess.class.php:1194-1220`, `CampaignProcess.class.php:2061-2087`
-* **Description**: `_checkCampaignDataExhausted()` decides a campaign is exhausted by counting rows matching `(status IS NULL OR status NOT IN ("Success","Placing","Ringing","OnQueue","OnHold")) AND retries < campaign.retries AND dnc = 0`. The dial query that actually places the calls adds two restrictions the count does not: `agent IS NULL`, and either all four of `date_init`/`date_end`/`time_init`/`time_end` NULL (branch 2) or a full current-window match (branch 1). Any row that is counted but not dialable blocks the campaign from ever reaching `T`: it is never selected for dialing, so its `retries` never increments, so it stays below the limit permanently and the campaign stays `Active` forever. Two shapes trigger it -- a row with a partially-set window (e.g. `date_init` set but `time_init` NULL, matching neither branch), and a row with a non-NULL `agent` that `_actualizarLlamadasAgendables()` never picks up. Verified latent on the client box on 2026-09-22 (0 such rows across all 8 campaigns), so this is a trap waiting on the first partial-window or orphaned-agent row, not an active fault.
-* **Recommendation**: Have the two sites share one predicate instead of restating it, so the finish check can never count a row the dialer will not dial.
-* **Status**: Untouched
-
 ### Campaign List Needs a 'Retries Left' Column
 
 * **Type**: Feature
 * **Urgency**: Medium
 * **Date Added**: 2026-09-22
 * **Location**: `paloSantoCampaignCC.class.php:88-90`, `campaign_out/index.php:195`, `campaign_out/index.php:211-213`, `campaign_out/lang/*.lang`
-* **Description**: The campaign list's `Pending Calls` column counts only never-originated rows (`status IS NULL`, `paloSantoCampaignCC.class.php:90`), but the dialer will not mark a campaign `Finish` until every non-`Success` row has also used up its retries (`_checkCampaignDataExhausted()`). The visible column is therefore not the one that governs the status, and a campaign reading `Pending Calls = 0` sits at `Active` with no on-screen explanation. Seen on the client box on 2026-09-22: campaigns 6, 7 and 8 (`ADSL - Q3'26 - VF/ET/OR`) each showed `Pending Calls = 0` at status `Active` while still holding 1507, 1250 and 456 retryable rows against a retry limit of 5 -- correct dialer behaviour, invisible in the GUI.
-* **Implementation**: Add a `Retries Left` column that **counts the remaining numbers that still have retries available -- one row per phone number still callable -- not the sum of retries remaining and not the retries already consumed**. For campaign 6 above the column reads `1507`. Deliberately reuse the dialer's own exhaustion predicate so the column reaches 0 exactly when the dialer becomes entitled to set `Finish` -- as a `getCampaigns()` subquery: `(SELECT COUNT(*) FROM calls WHERE id_campaign = c.id AND (status IS NULL OR status NOT IN ('Success','Placing','Ringing','OnQueue','OnHold')) AND retries < c.retries AND dnc = 0) AS retries_left`. Then add the cell to the `$arrData[]` row and the header to `setColumns()`, keeping both arrays in the same order; the label goes through `_tr()` with entries in every `lang/<lang>.lang` (en, es, fr, ru, cn, tr, fa).
+* **Description**: The campaign list's `Pending Calls` column counts only never-dialled rows the dialer can still dial (since 5.4.35, by `_checkCampaignDataExhausted()`'s rule, `paloSantoCampaignCC::getCampaigns()`), but the dialer will not mark a campaign `Finish` until every non-`Success` row has also used up its retries (`_checkCampaignDataExhausted()`). The visible column is therefore not the one that governs the status, and a campaign reading `Pending Calls = 0` sits at `Active` with no on-screen explanation. Seen on the client box on 2026-09-22: campaigns 6, 7 and 8 (`ADSL - Q3'26 - VF/ET/OR`) each showed `Pending Calls = 0` at status `Active` while still holding 1507, 1250 and 456 retryable rows against a retry limit of 5 -- correct dialer behaviour, invisible in the GUI.
+* **Implementation**: Add a `Retries Left` column that **counts the remaining numbers that still have retries available -- one row per phone number still callable -- not the sum of retries remaining and not the retries already consumed**. For campaign 6 above the column reads `1507`. Deliberately reuse the dialer's own exhaustion predicate -- the window/agent rule `_checkCampaignDataExhausted()` counts with, current date and time bound from PHP as the repo requires, never a SQL date function -- so the column reaches 0 exactly when the dialer becomes entitled to set `Finish`: `(SELECT COUNT(*) FROM calls WHERE id_campaign = c.id AND (status IS NULL OR status NOT IN ('Success','Placing','Ringing','OnQueue','OnHold')) AND retries < c.retries AND dnc = 0 AND ((date_init IS NULL AND date_end IS NULL AND time_init IS NULL AND time_end IS NULL AND agent IS NULL) OR (date_init IS NOT NULL AND date_end IS NOT NULL AND time_init IS NOT NULL AND time_end IS NOT NULL AND (date_end > ? OR (date_end = ? AND time_end >= ?))))) AS retries_left`, the three placeholders bound to PHP's `date('Y-m-d')` twice and `date('H:i:s')` once. Then add the cell to the `$arrData[]` row and the header to `setColumns()`, keeping both arrays in the same order; the label goes through `_tr()` with entries in every `lang/<lang>.lang` (en, es, fr, ru, cn, tr, fa).
 * **Open decision**: The predicate above includes never-originated rows, so `Retries Left` is a superset of `Pending Calls` (on the client box campaign 9 showed 13578 pending against 15039 retries-left). Confirm whether that overlap is wanted, or whether never-originated rows should be excluded so the two columns are disjoint -- excluding them breaks the "reaches 0 when the dialer finishes it" property, so the overlap is probably the right call.
 * **Status**: Untouched
 
 ---
 
 ## Low
+
+### A Task Killed Mid-RPC Without a Stop Signal Still Hangs Its Caller
+
+* **Type**: Bug
+* **Urgency**: Low
+* **Date Added**: 2026-10-26
+* **Location**: `setup/dialer_process/dialer/TuberiaMensaje.class.php` (`RPC()`, the wait loop); `setup/dialer_process/dialer/HubServer.class.php` (`rutearMensaje()`, which drops a request to an absent task)
+* **Description**: The caller of `TuberiaMensaje::RPC()` waits until its peer answers or the hub link closes, and since 5.4.37 also stops waiting on a pending SIGTERM/SIGINT/SIGQUIT. A peer that dies without the caller being signalled - SIGKILL, or a crash while the hub's restart is suppressed - still leaves it waiting, and the hub restarts only tasks that exited, so the caller is never replaced. A time limit alone is wrong: `AMIEventProcess_ejecutarOriginate` can rightly take 30 s to answer, and a late answer arriving after a bounded wait would be read by the next RPC as its own. The fix is request ids on RPC answers.
+* **Status**: Untouched
+
+### Failed Calls Redialled With No Pause
+
+* **Type**: Feature
+* **Urgency**: Low
+* **Date Added**: 2026-10-26
+* **Location**: `CampaignProcess.class.php:1446-1470` (the dial query), `CampaignProcess.class.php:1543-1548` (placement stamps `datetime_originate` and `retries + 1`), the campaign form in `campaign_out`
+* **Description**: A failed call (busy, congestion, no answer - any failure) is offered again in the next cycle, with no wait. The dial query orders rows by `retries` (after `dummy_priority`), so in a campaign with many numbers a failed row already waits until every row with fewer attempts has been dialled: in effect it is retried at the end of the pass. But nothing spaces the attempts on one row in time. When few rows are left - near the end of any campaign, or in a campaign with one number - a failed number is dialled again seconds after its failure, until its retries are used up. Seen in a lab test on 2026-10-26 with a one-number campaign: congestion at 14:37:03, dialled again at 14:37:05. A number that was just busy or unanswered is likely to be so again seconds later, so those retries are spent for nothing.
+* **Recommendation**: Failed calls should be retried at the end of the campaign, not again straight away. Keep the `retries` ordering, and add a minimum interval between attempts on the same row: a row with `retries > 0` is offered only when its last attempt (`datetime_originate`) is at least N minutes old, the cutoff computed in PHP and bound into both branches of the dial query. N is a per-campaign setting on the campaign form, with a default to be decided. `_checkCampaignDataExhausted()` must keep counting such a row as dialable, so a campaign waiting out the interval stays Active; its rule has no time test on retries, so it already does.
+* **Status**: Untouched
+
+### A Trunk's Hangup Is Sometimes Never Matched to Its Call
+
+* **Type**: Investigation
+* **Urgency**: Low
+* **Date Added**: 2026-10-26
+* **Location**: `AMIEventProcess.class.php` (`msg_Hangup`, the "Local channel optimized out of the bridge, call continues on …, ignoring hangup" branch)
+* **Description**: Sometimes a trunk channel's Hangup is never matched to its call: seen on a GSM-gateway trunk whose call went through a Local channel that was optimised away. The dialer saw the Local legs hang up and ignored them (that branch assumes the real trunk channel is still up), but the trunk channel itself was already gone - an AMI hangup request for it answered "No such channel" seconds later, and no Hangup event for it was ever processed. The call then stays `Success` with no `end_time` until the 2-hour orphan sweeper (`_cleanOrphanedConnectedCalls()`) force-closes it. Since 5.4.37 that sweeper also deletes the call's `current_calls` row, so the leftover is bounded - but the call's true end time and duration are still lost. Next step: capture AMI events on a trunk that shows this, to learn whether the Hangup never reaches the dialer or arrives renamed by a Local-channel masquerade.
+* **Status**: Untouched
 
 ### Exact Predictive Count for Ringing Callback Agents
 

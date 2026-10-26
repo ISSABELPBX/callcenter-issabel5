@@ -114,6 +114,7 @@ class AMIEventProcess extends TuberiaProcess
         foreach (array('nuevasCampanias',
             'leerTiempoContestar', 'nuevasLlamadasMarcar',
             'contarLlamadasEsperandoRespuesta', 'agentesAgendables',
+            'agentesReservados',
             'infoPrediccionCola', 'ejecutarOriginate') as $k)
             $this->_tuberia->registrarManejador('CampaignProcess', $k, array($this, "rpc_$k"));
 
@@ -1004,6 +1005,24 @@ class AMIEventProcess extends TuberiaProcess
         return $ociosos;
     }
 
+    private function _agentesReservados()
+    {
+        $reservados = array();
+        foreach ($this->_listaAgentes as $a) if ($a->estado_consola == 'logged-in') {
+            /* Solo los agentes reservados sin ninguna llamada: una llamada
+             * agendada en vuelo (llamada_agendada) o una ordinaria en curso
+             * (llamada) nunca debe ser tocada por el barrido.
+             * Only reserved agents with no call at all: a scheduled call in
+             * flight (llamada_agendada) or an ordinary call in progress
+             * (llamada) must never be touched by the sweep. */
+            if ($a->reservado &&
+                is_null($a->llamada) &&
+                is_null($a->llamada_agendada))
+                $reservados[] = $a->channel;
+        }
+        return $reservados;
+    }
+
     private function _actualizarConfig($k, $v)
     {
     	switch ($k) {
@@ -1495,6 +1514,16 @@ class AMIEventProcess extends TuberiaProcess
         }
         $this->_tuberia->enviarRespuesta($sFuente, call_user_func_array(
             array($this, '_agentesAgendables'), $datos));
+    }
+
+    public function rpc_agentesReservados($sFuente, $sDestino, $sNombreMensaje,
+        $iTimestamp, $datos)
+    {
+        if ($this->DEBUG) {
+            $this->_log->output('DEBUG: '.__METHOD__.' recibido/received: '.print_r($datos, 1));
+        }
+        $this->_tuberia->enviarRespuesta($sFuente, call_user_func_array(
+            array($this, '_agentesReservados'), $datos));
     }
 
     public function rpc_reportarInfoLlamadasColaEntrante($sFuente, $sDestino,

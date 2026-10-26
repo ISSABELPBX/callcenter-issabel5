@@ -7,6 +7,38 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.4.38
+
+- Bug fix: deleting an outgoing campaign removes its calls' current_calls rows first, so a stale row no longer fails the delete with foreign key error 1451
+- Bug fix: deleting an incoming campaign removes its calls' current_call_entry rows first, for the same reason
+- Bug fix: the dialer's sweeper that closes orphaned connected calls also deletes their current_calls rows, so a missed Hangup no longer leaves one behind until the next dialer restart
+
+## 5.4.37
+
+- Bug fix: a dialer task waiting for an answer from a task that was stopped now gives up when it is told to stop, so it exits and is restarted instead of hanging
+- Bug fix: a cycle that gets no answer from AMIEventProcess to its call list places no call, instead of marking rows Placing that nothing dials
+
+## 5.4.36
+
+- Bug fix: a scheduled call whose window passes before it is dialed is closed as Failure with the reason "Scheduled call expired" within one 3-second cycle, instead of staying without a status forever and missing from the campaign's CSV download
+
+## 5.4.35
+
+- Bug fix: campaign finish ignores rows the dialer can never dial (a callback window that passed, an agent row with no window), so the campaign reaches Finished instead of staying Active until its end date
+- Bug fix: a campaign is no longer marked Finished while its last calls are still dialing, so a failed call with retries left is retried
+- Bug fix: the campaign list's Pending Calls counts only calls the dialer can still make, so a Finished campaign shows 0 instead of an expired callback or a DNC number
+
+## 5.3.34
+
+- Bug fix: a due same-agent callback is placed even in a cycle that allocated no agents, instead of pausing its agent until logoff
+- Bug fix: no ordinary call is placed for an agent reserved for a callback, and a free agent is no longer idled beside a due callback
+- Bug fix: a reservation whose callback can no longer be placed is released in the same cycle, not at logoff
+
+## 5.3.33
+
+- Bug fix: the agentconsole ECCP client no longer ships the well-known default password - fresh installs and updates create or leave a random one, and a password an admin set is never overwritten
+- Improve: the 44 eccp-examples take their ECCP credentials from ECCP_SERVER/ECCP_USER/ECCP_PASS instead of a hardcoded default, and refuse to run without a password
+
 ## 5.3.32
 
 - Bug fix: a form answer is measured in characters, not bytes - an Arabic answer over 125 characters was refused as too large though its column holds 250 characters
