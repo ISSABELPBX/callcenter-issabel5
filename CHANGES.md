@@ -7,6 +7,17 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.4.38
+
+- Bug fix: deleting an outgoing campaign removes its calls' current_calls rows first, so a stale row no longer fails the delete with foreign key error 1451
+- Bug fix: deleting an incoming campaign removes its calls' current_call_entry rows first, for the same reason
+- Bug fix: the dialer's sweeper that closes orphaned connected calls also deletes their current_calls rows, so a missed Hangup no longer leaves one behind until the next dialer restart
+
+## 5.4.37
+
+- Bug fix: a dialer task waiting for an answer from a task that was stopped now gives up when it is told to stop, so it exits and is restarted instead of hanging
+- Bug fix: a cycle that gets no answer from AMIEventProcess to its call list places no call, instead of marking rows Placing that nothing dials
+
 ## 5.4.36
 
 - Bug fix: a scheduled call whose window passes before it is dialed is closed as Failure with the reason "Scheduled call expired" within one 3-second cycle, instead of staying without a status forever and missing from the campaign's CSV download

@@ -285,9 +285,33 @@ class TuberiaMensaje extends MultiplexConn
     // Initiate an RPC (remote procedure) on the indicated destination
     function RPC($sDestino, $sProc, $datos)
     {
+        global $gsNombreSignal;
+
     	$this->enviarMensaje($sDestino, $sProc, $datos);
         while (!is_null($this->sKey) && !$this->_hayRespuesta) {
-            $this->multiplexSrv->procesarActividad(); 
+            $this->multiplexSrv->procesarActividad();
+
+            /* El par puede haber dejado de existir a mitad de la llamada: el
+             * hub descarta la solicitud para una tarea ausente y ninguna
+             * respuesta llega jamás. La señal de parada sólo se atiende de
+             * vuelta en el bucle de la tarea, al que esta espera nunca
+             * regresa, así que una parada pendiente debe terminar la espera
+             * aquí. SIGHUP (rotación de logs) no la termina.
+             * The peer may be gone mid-call: the hub drops the request for an
+             * absent task and no answer ever comes. A stop signal is only
+             * acted on back in the task loop, which this wait never returns
+             * to, so a pending stop must end the wait here. SIGHUP (log
+             * rotation) does not end it. */
+            pcntl_signal_dispatch();
+            if (!is_null($gsNombreSignal) &&
+                in_array($gsNombreSignal, array(SIGTERM, SIGINT, SIGQUIT))) {
+                if (!is_null($this->_log)) {
+                    $this->_log->output("INFO: se abandona la espera de $sProc($sDestino): ".
+                        "señal $gsNombreSignal pendiente | EN: abandoning the wait for ".
+                        "$sProc($sDestino): signal $gsNombreSignal pending");
+                }
+                return NULL;
+            }
         }
         if ($this->_hayRespuesta) {
             $r = $this->_respuesta;

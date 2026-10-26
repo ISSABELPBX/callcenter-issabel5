@@ -34,6 +34,15 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 
 ## Low
 
+### A Task Killed Mid-RPC Without a Stop Signal Still Hangs Its Caller
+
+* **Type**: Bug
+* **Urgency**: Low
+* **Date Added**: 2026-10-26
+* **Location**: `setup/dialer_process/dialer/TuberiaMensaje.class.php` (`RPC()`, the wait loop); `setup/dialer_process/dialer/HubServer.class.php` (`rutearMensaje()`, which drops a request to an absent task)
+* **Description**: The caller of `TuberiaMensaje::RPC()` waits until its peer answers or the hub link closes, and since 5.4.37 also stops waiting on a pending SIGTERM/SIGINT/SIGQUIT. A peer that dies without the caller being signalled - SIGKILL, or a crash while the hub's restart is suppressed - still leaves it waiting, and the hub restarts only tasks that exited, so the caller is never replaced. A time limit alone is wrong: `AMIEventProcess_ejecutarOriginate` can rightly take 30 s to answer, and a late answer arriving after a bounded wait would be read by the next RPC as its own. The fix is request ids on RPC answers.
+* **Status**: Untouched
+
 ### Failed Calls Redialled With No Pause
 
 * **Type**: Feature
@@ -42,6 +51,15 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Location**: `CampaignProcess.class.php:1446-1470` (the dial query), `CampaignProcess.class.php:1543-1548` (placement stamps `datetime_originate` and `retries + 1`), the campaign form in `campaign_out`
 * **Description**: A failed call (busy, congestion, no answer - any failure) is offered again in the next cycle, with no wait. The dial query orders rows by `retries` (after `dummy_priority`), so in a campaign with many numbers a failed row already waits until every row with fewer attempts has been dialled: in effect it is retried at the end of the pass. But nothing spaces the attempts on one row in time. When few rows are left - near the end of any campaign, or in a campaign with one number - a failed number is dialled again seconds after its failure, until its retries are used up. Seen in a lab test on 2026-10-26 with a one-number campaign: congestion at 14:37:03, dialled again at 14:37:05. A number that was just busy or unanswered is likely to be so again seconds later, so those retries are spent for nothing.
 * **Recommendation**: Failed calls should be retried at the end of the campaign, not again straight away. Keep the `retries` ordering, and add a minimum interval between attempts on the same row: a row with `retries > 0` is offered only when its last attempt (`datetime_originate`) is at least N minutes old, the cutoff computed in PHP and bound into both branches of the dial query. N is a per-campaign setting on the campaign form, with a default to be decided. `_checkCampaignDataExhausted()` must keep counting such a row as dialable, so a campaign waiting out the interval stays Active; its rule has no time test on retries, so it already does.
+* **Status**: Untouched
+
+### A Trunk's Hangup Is Sometimes Never Matched to Its Call
+
+* **Type**: Investigation
+* **Urgency**: Low
+* **Date Added**: 2026-10-26
+* **Location**: `AMIEventProcess.class.php` (`msg_Hangup`, the "Local channel optimized out of the bridge, call continues on …, ignoring hangup" branch)
+* **Description**: Sometimes a trunk channel's Hangup is never matched to its call: seen on a GSM-gateway trunk whose call went through a Local channel that was optimised away. The dialer saw the Local legs hang up and ignored them (that branch assumes the real trunk channel is still up), but the trunk channel itself was already gone - an AMI hangup request for it answered "No such channel" seconds later, and no Hangup event for it was ever processed. The call then stays `Success` with no `end_time` until the 2-hour orphan sweeper (`_cleanOrphanedConnectedCalls()`) force-closes it. Since 5.4.37 that sweeper also deletes the call's `current_calls` row, so the leftover is bounded - but the call's true end time and duration are still lost. Next step: capture AMI events on a trunk that shows this, to learn whether the Hangup never reaches the dialer or arrives renamed by a Local-channel masquerade.
 * **Status**: Untouched
 
 ### Exact Predictive Count for Ringing Callback Agents

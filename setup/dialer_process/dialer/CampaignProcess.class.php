@@ -1533,6 +1533,23 @@ PETICION_LLAMADAS;
         // Send to AMIEventProcess for monitoring / Enviar a AMIEventProcess para monitoreo
         if (count($listaLlamadas) > 0) {
             $listaKeyRepetidos = $this->_tuberia->AMIEventProcess_nuevasLlamadasMarcar($listaLlamadas);
+
+            /* Sin respuesta de AMIEventProcess (el proceso se detiene, o se
+             * perdió el enlace al hub) nadie marcaría ni monitorearía las
+             * llamadas de este ciclo: una fila marcada Placing consume un
+             * reintento y queda huérfana de inmediato. No se coloca nada.
+             * With no answer from AMIEventProcess (the process is stopping,
+             * or the hub link was lost) nothing would dial or monitor this
+             * cycle's calls: a row marked Placing uses up a retry and is
+             * orphaned at once. Nothing is placed. */
+            if (!is_array($listaKeyRepetidos)) {
+                $this->_log->output('WARN: AMIEventProcess no respondió a la lista de '.
+                    'llamadas (proceso deteniéndose o sin enlace al hub), no se coloca '.
+                    'ninguna llamada en este ciclo | EN: no answer from AMIEventProcess '.
+                    'to the call list (stopping, or the hub link closed), no call placed '.
+                    'this cycle');
+                return FALSE;
+            }
             foreach ($listaKeyRepetidos as $k) {
                 $sKey = $listaLlamadas[$k]['actionid'];
                 $sCanalTrunk = $listaLlamadas[$k]['dialstring'];
@@ -2246,6 +2263,28 @@ PETICION_LLAMADAS_AGENTE;
         // Llamadas conectadas de más de 2 horas (por omisión) sin end_time son definitivamente huérfanas
         $sThreshold = date('Y-m-d H:i:s', time() - $iConnectedTimeout);
 
+        /* Borrar primero los current_calls de las llamadas que están por
+         * cerrarse: tras el UPDATE las filas ya no cumplen end_time IS NULL,
+         * y el DELETE usaría un predicado distinto del que las cerró. Sin
+         * esto, cada llamada huérfana deja una fila en current_calls hasta
+         * el próximo reinicio del demonio (su clave foránea no tiene ON
+         * DELETE CASCADE, y el borrado de la campaña fallaría con 1451). */
+        /* Delete first the current_calls rows of the calls about to be closed:
+         * after the UPDATE the rows no longer match end_time IS NULL, and the
+         * DELETE would use a predicate different from the one that closed
+         * them. Without this, every orphaned call leaves a row behind in
+         * current_calls until the next daemon restart (its foreign key has no
+         * ON DELETE CASCADE, and deleting the campaign would fail with 1451). */
+        $sPeticion = "DELETE current_calls FROM current_calls, calls "
+            . "WHERE current_calls.id_call = calls.id "
+            . "AND (calls.status = 'Success' OR calls.status = 'OnHold') "
+            . "AND calls.end_time IS NULL "
+            . "AND calls.start_time IS NOT NULL "
+            . "AND calls.start_time < ?";
+        $sth = $this->_db->prepare($sPeticion);
+        $sth->execute(array($sThreshold));
+        $iUnlinked = $sth->rowCount();
+
         $sPeticion = "UPDATE calls SET status = 'Hangup', end_time = start_time "
             . "WHERE (status = 'Success' OR status = 'OnHold') "
             . "AND end_time IS NULL "
@@ -2255,11 +2294,13 @@ PETICION_LLAMADAS_AGENTE;
         $sth->execute(array($sThreshold));
         $iCleaned = $sth->rowCount();
 
-        if ($iCleaned > 0) {
+        if ($iCleaned > 0 || $iUnlinked > 0) {
             $this->_log->output("WARN: cleaned $iCleaned orphaned connected calls "
-                . "(older than " . ($iConnectedTimeout / 3600) . " hours) | "
+                . "(older than " . ($iConnectedTimeout / 3600) . " hours), "
+                . "unlinked $iUnlinked current_calls rows | "
                 . "limpiadas $iCleaned llamadas conectadas huérfanas "
-                . "(más antiguas de " . ($iConnectedTimeout / 3600) . " horas)");
+                . "(más antiguas de " . ($iConnectedTimeout / 3600) . " horas), "
+                . "$iUnlinked filas de current_calls desvinculadas");
         }
     }
 

@@ -520,6 +520,7 @@ SQL_UPDATE_CAMPAIGN;
             'DELETE FROM form_data_recolected WHERE id_calls IN (SELECT id from calls WHERE id_campaign = ?)',
             'DELETE call_progress_log FROM call_progress_log, calls '.
                 'WHERE call_progress_log.id_call_outgoing = calls.id AND calls.id_campaign = ?',
+            'DELETE FROM current_calls WHERE id_call IN (SELECT id from calls WHERE id_campaign = ?)',
             'DELETE FROM calls WHERE id_campaign = ?',
             'DELETE FROM campaign WHERE id = ?',
         );

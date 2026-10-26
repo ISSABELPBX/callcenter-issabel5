@@ -492,6 +492,7 @@ SQL_CAMPANIAS;
             'DELETE FROM form_data_recolected_entry WHERE id_call_entry IN (SELECT id from call_entry WHERE id_campaign = ?)',
             'DELETE call_progress_log FROM call_progress_log, call_entry '.
                 'WHERE call_progress_log.id_call_incoming = call_entry.id AND call_entry.id_campaign = ?',
+            'DELETE FROM current_call_entry WHERE id_call_entry IN (SELECT id from call_entry WHERE id_campaign = ?)',
             'DELETE FROM call_entry WHERE id_campaign = ?',
             'DELETE FROM campaign_entry WHERE id = ?'
         );
