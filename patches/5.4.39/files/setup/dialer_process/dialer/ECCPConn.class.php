@@ -1812,7 +1812,19 @@ class ECCPConn
                     if (!is_null($sCanalExt)) $this->_ami->Hangup($sCanalExt);
                 }
             } else {
-                // app_agent_pool (Asterisk 12+): Hangup the AgentLogin channel to logout
+                // app_agent_pool (Asterisk 12+): Hangup the AgentLogin channel to logout.
+                // The client's call ends FIRST, by its real channel, mirroring
+                // the SIP/IAX2/PJSIP branch below: with the held client gone,
+                // the consult Dial()'s F() has nobody to join the colleague
+                // to, and the logoff leaves no orphaned call behind.
+                // La llamada del cliente termina primero, por su canal real,
+                // igual que la rama SIP/IAX2/PJSIP de abajo: sin cliente
+                // retenido, la F() del Dial de la consulta no une al colega
+                // con nadie y el logoff no deja llamada huérfana.
+                if (!is_null($infoAgente) && !is_null($infoAgente['clientchannel'])) {
+                    $this->_ami->Hangup($infoAgente['clientchannel']);
+                }
+
                 $sCanalLogin = NULL;
                 if (!is_null($infoAgente)) {
                     $sCanalLogin = $infoAgente['login_channel'];
@@ -3454,8 +3466,10 @@ SQL_INSERTAR_AGENDAMIENTO;
 
             // Mark agent as in consultation so ConsultationEnd can be detected.
             // The request timestamp lets AMIEventProcess discard this mark if a
-            // ConsultationEnd for the same consultation got there first.
-            $this->_tuberia->msg_AMIEventProcess_marcarConsultationIniciada($sAgente, microtime(TRUE));
+            // ConsultationEnd for the same consultation got there first. The
+            // held client's channel is saved alongside, so a session end can
+            // still reach the client if the call reference is lost.
+            $this->_tuberia->msg_AMIEventProcess_marcarConsultationIniciada($sAgente, microtime(TRUE), $clientChannel);
 
             // Redirect both channels simultaneously:
             // - Agent's SIP phone -> atxfer-consult (dials the target)
@@ -3528,8 +3542,10 @@ SQL_INSERTAR_AGENDAMIENTO;
 
             // Mark agent as in consultation so ConsultationEnd can be detected.
             // The request timestamp lets AMIEventProcess discard this mark if a
-            // ConsultationEnd for the same consultation got there first.
-            $this->_tuberia->msg_AMIEventProcess_marcarConsultationIniciada($sAgente, microtime(TRUE));
+            // ConsultationEnd for the same consultation got there first. The
+            // held client's channel is saved alongside, so a session end can
+            // still reach the client if the call reference is lost.
+            $this->_tuberia->msg_AMIEventProcess_marcarConsultationIniciada($sAgente, microtime(TRUE), $clientChannel);
 
             // Redirect both channels simultaneously:
             // - Agent's device channel -> cbxfer-consult (dials the colleague)
@@ -3557,8 +3573,11 @@ SQL_INSERTAR_AGENDAMIENTO;
             // This avoids the 20-second busy tone delay when target declines
             $this->_ami->SetVar($transferChannel, 'TRANSFER_CONTEXT', 'cbext-atxfer');
 
-            // Mark agent as in consultation so msg_Link can detect return
-            $this->_tuberia->msg_AMIEventProcess_marcarConsultationIniciada($sAgente, microtime(TRUE));
+            // Mark agent as in consultation so msg_Link can detect return.
+            // The held client's channel is saved alongside, so a session end
+            // can still reach the client if the call reference is lost.
+            $this->_tuberia->msg_AMIEventProcess_marcarConsultationIniciada($sAgente, microtime(TRUE),
+                $infoLlamada['actualchannel']);
 
             $this->_log->output('DEBUG: '.__METHOD__.': Sending Atxfer to ext='.$sExtension.' context=cbext-atxfer channel='.$transferChannel);
             $r = $this->_ami->Atxfer(

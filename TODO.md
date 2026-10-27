@@ -8,21 +8,12 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 
 ---
 
-## Medium
-
-### Attended-Transfer Hold Has No Orphan Check
-
-* **Type**: Bug
-* **Urgency**: Medium
-* **Date Added**: 2026-08-30 (Change #70)
-* **Location**: `extensions_custom.conf:33`, `setup/installer.php:357`
-* **Description**: `[atxfer-hold]` is a bare `MusicOnHold(,1800)` with no check that the agent who put the caller there still exists, so any path that ever leaves a caller in it means up to 30 minutes of music with nobody on the other end. Change #70 removed the one known such path (the `Bridge()` thread race) and added a `SoftHangup` backstop inside `[atxfer-rebridge]`, but the context itself is still a dead end: the residual exposure is a caller orphaned during the ~2 s reconnect window, or by any future path. The `1800` is also now out of step with the 900 s hold cap the `callcenter_hold` parking lot got in Change #69. Proposed fix: have the dialer `SetVar` the agent's channel name onto the client channel at both `Redirect` sites in `ECCPConn::Request_agentauth_atxfercall()`, then run the hold as chunked `MusicOnHold` slices that bail out via `CHANNEL_EXISTS()` once that channel is gone. `res_musiconhold` restores the saved position for `mode=files` classes, so chunking does not restart the music. Deferred from Change #70 to keep that fix to a single file.
-* **Status**: Untouched
+## Low
 
 ### Campaign List Needs a 'Retries Left' Column
 
 * **Type**: Feature
-* **Urgency**: Medium
+* **Urgency**: Low
 * **Date Added**: 2026-09-22
 * **Location**: `paloSantoCampaignCC.class.php:88-90`, `campaign_out/index.php:195`, `campaign_out/index.php:211-213`, `campaign_out/lang/*.lang`
 * **Description**: The campaign list's `Pending Calls` column counts only never-dialled rows the dialer can still dial (since 5.4.35, by `_checkCampaignDataExhausted()`'s rule, `paloSantoCampaignCC::getCampaigns()`), but the dialer will not mark a campaign `Finish` until every non-`Success` row has also used up its retries (`_checkCampaignDataExhausted()`). The visible column is therefore not the one that governs the status, and a campaign reading `Pending Calls = 0` sits at `Active` with no on-screen explanation. Seen on the client box on 2026-09-22: campaigns 6, 7 and 8 (`ADSL - Q3'26 - VF/ET/OR`) each showed `Pending Calls = 0` at status `Active` while still holding 1507, 1250 and 456 retryable rows against a retry limit of 5 -- correct dialer behaviour, invisible in the GUI.
@@ -30,9 +21,14 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Open decision**: The predicate above includes never-originated rows, so `Retries Left` is a superset of `Pending Calls` (on the client box campaign 9 showed 13578 pending against 15039 retries-left). Confirm whether that overlap is wanted, or whether never-originated rows should be excluded so the two columns are disjoint -- excluding them breaks the "reaches 0 when the dialer finishes it" property, so the overlap is probably the right call.
 * **Status**: Untouched
 
----
+### Transfer Bridge Reshuffle Can Finalize a Live Call
 
-## Low
+* **Type**: Bug
+* **Urgency**: Low
+* **Date Added**: 2026-10-27
+* **Location**: `AMIEventProcess.class.php` (`msg_Link`, the "transferred to an unmonitored extension" detection); `Llamada.class.php` (`llamadaFinalizaSeguimiento`, which clears the agent's call reference)
+* **Description**: During an attended-transfer consultation, `msg_Link`'s transfer detection can read a bridge reshuffle (a `msg_BridgeEnter` pairing) as a transfer to an unmonitored extension, and finalize the call. The misfire logs only DEBUG lines, so it is invisible on a dialer running at INFO: the agent silently loses the call while the client is still up. Seen once in eleven runs (2026-10-27): the session-end path then found no client channel to hang up and the call record closed with the client still bridged to the colleague. The session-end path no longer depends on that reference: the held client's channel is saved at the consultation start and used when the call or its channel is unknown. Proposed fix: skip that finalize while a consultation flag is set for the call's agent; check the console's Complete transfer first, because it may rely on this same detection.
+* **Status**: Untouched
 
 ### A Task Killed Mid-RPC Without a Stop Signal Still Hangs Its Caller
 
@@ -305,15 +301,6 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Description**: Placeholder for future "contacts per campaign" feature in incoming campaigns. **Current architecture**: Incoming campaigns use **global** `contact` table shared across all campaigns (lookup by `call_entry.id_contact`). Outgoing campaigns have campaign-specific contacts via `calls` table. **TODO intent**: If incoming campaigns were given their own contact lists (like outgoing), the `delete_campaign()` function would need SQL to delete campaign-specific contacts (e.g., `DELETE FROM campaign_contact_entry WHERE id_campaign = ?`). **Note**: This is a design note for hypothetical future enhancement, not an active bug. Current global contact model works but has limitations: same phone number cannot have different attributes per campaign, no data isolation between campaigns.
 * **Status**: Untouched
 
-### Mid-Call Logoff Hangup Target
-
-* **Type**: Bug
-* **Urgency**: Low
-* **Date Added**: 2026-10-03
-* **Location**: `setup/dialer_process/dialer/AMIEventProcess.class.php` (`_ejecutarLogoffAgente`, the `Hangup($llamada->agentchannel)` call)
-* **Description**: For an Agent-type login, `agentchannel` is the device name `Agent/NNNN`, never a channel. So every logoff with a call still up logs "No such channel" and spends one synchronous AMI round trip; the fallback below it finalises the call. `actualAgentChannel` holds the real channel (`Llamada.class.php`). But hanging that up would make a mid-call logoff, from the console button or a supervisor, drop the caller: decide that behaviour first.
-* **Status**: Untouched
-
 ### Customer Name Taken From Attribute 1
 
 * **Type**: Improvement
@@ -368,15 +355,6 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Description**: The handler passes only the queue and the status to `Agente::actualizarEstadoEnCola()` (update status in queue); the event's `Paused` field is ignored there, although `QueueShadow` records it for the same member (`QueueShadow.class.php:190`). Decide whether the agent object needs it, for example to notice a pause made outside the dialer.
 * **Status**: Untouched
 
-### Agent Logoff With a Call on Hold
-
-* **Type**: Investigation
-* **Urgency**: Low
-* **Date Added**: 2026-10-25
-* **Location**: `SQLWorkerProcess.class.php:1187-1188` (`_AgentLogoff()`)
-* **Description**: At logoff the worker closes every open pause, hold included, but nothing handles the call that hold parked: the in-code TODO asks what happens to it. Since Change #69 a parked call that times out is hung up and finalized, so it ends at the latest after the 900 s parking time; whether it should end at logoff instead belongs with "Mid-Call Logoff Hangup Target".
-* **Status**: Untouched
-
 ### Hold End Restates the Current-Calls Update
 
 * **Type**: Refactor
@@ -411,6 +389,24 @@ Unresolved issues for the call center module. Items are sorted by urgency (Criti
 * **Date Added**: 2026-10-25
 * **Location**: `campaign_out/index.php:852` and `campaign_in/index.php:641` (`adaptar_formato_rte()`, two identical copies)
 * **Description**: The function prepares a campaign's script text for loading into the rich-text editor: it turns curly quotes into straight ones, single quotes into `&#39;`, and line breaks into spaces. The in-code TODO asks to check what escaping is actually needed. Check it against the editor the pages load today, and keep one copy.
+* **Status**: Untouched
+
+### Attended Transfer to the Agent's Own Extension
+
+* **Type**: Improvement
+* **Urgency**: Low
+* **Date Added**: 2026-10-27
+* **Location**: `setup/dialer_process/dialer/ECCPConn.class.php:3400-3404` (`Request_agentauth_atxfercall()`)
+* **Description**: The attended-transfer request checks only that the target is digits, so it accepts the agent's own extension: for an Agent-type login, the extension the agent logged in from, whose phone carries the session call (the request already reads its `login_channel`, `:3421-3432`); for a callback login, the agent's own extension. A transfer to the phone that is already on the call has no use, and what it does has not been measured. Refuse it before any `Redirect`, with a failure the console shows.
+* **Status**: Untouched
+
+### Disconnection Reason in the Reports
+
+* **Type**: Feature
+* **Urgency**: Low
+* **Date Added**: 2026-10-27
+* **Location**: `setup/call_center.sql` (`audit`, `call_entry`, `calls`), `modules/login_logout`, `modules/calls_detail`
+* **Description**: The reports do not say why an agent's session or a call ended. A session row (`audit`) has only its start and end times, an incoming call row (`call_entry`) only its status, and an outgoing call row (`calls`) has `failure_cause` only for a call that never connected. The dialer knows why it ends a session: the agent's own logout, a logoff from the console or by a supervisor, the end of an Agent-type agent's session call, a phone that unregistered or stopped answering qualify, a removal from all the agent's queues, a dialer stop or restart. A call has its own reasons: which side hung up, Asterisk's hangup cause (a BYE is 16, a lost phone's RTP timeout 44), or the dialer ending it at a session end. Record the reason with the row and show it in Login Logout and Calls Detail. Seen on a lab box on 2026-10-27: the dialer logged an agent off, mid-call, because its phone's registration had lapsed for ten seconds, and nothing on screen said why.
 * **Status**: Untouched
 
 ---
