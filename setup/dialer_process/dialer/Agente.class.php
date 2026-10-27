@@ -707,7 +707,23 @@ class Agente
                     array($log),
                     $this->number);
             } else {
-                // app_agent_pool (Asterisk 12+): Hangup the AgentLogin channel
+                // app_agent_pool (Asterisk 12+): Hangup the AgentLogin channel.
+                // The client's call ends FIRST, by its real channel: once the
+                // held client is gone, the consult Dial()'s F() has nobody to
+                // join the colleague to, and the session's end leaves no
+                // orphaned call behind.
+                // El canal de login cuelga al final: primero termina la
+                // llamada del cliente por su canal real - sin cliente
+                // retenido, la F() del Dial de la consulta no une al colega
+                // con nadie y el fin de sesión no deja llamada huérfana.
+                if (!is_null($this->_llamada)
+                        && !is_null($this->_llamada->actualchannel)
+                        && $this->_llamada->actualchannel !== '') {
+                    $ami->asyncHangup(
+                        array($this, '_cb_HangupLogoff'),
+                        array($log),
+                        $this->_llamada->actualchannel);
+                }
                 if (!is_null($this->_login_channel)) {
                     $ami->asyncHangup(
                         array($this, '_cb_HangupLogoff'),

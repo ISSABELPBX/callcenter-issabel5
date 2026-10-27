@@ -7,6 +7,16 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.4.39
+
+- Bug fix: an agent's session ending during an attended transfer ends the client's call, instead of leaving it on hold music or joining it to the colleague
+- Bug fix: an Agent-type session call that dies is no longer taken for a failed login; the session and its audit row close
+- Bug fix: a callback agent who loses the phone after the colleague answered no longer hands the client over; hanging up on purpose still completes the transfer
+- Bug fix: a forced logoff with a call up hangs up the client's real channel, not the agent's name ("No such channel")
+- Bug fix: an Agentlogoff event no longer logs an agent off a second time
+- Improve: a dialer stop or restart now ends callback agents' live calls too, as it already did Agent-type agents'
+- Improve: removing a busy callback agent from all its queues ends the client's call along with the session
+
 ## 5.4.38
 
 - Bug fix: deleting an outgoing campaign removes its calls' current_calls rows first, so a stale row no longer fails the delete with foreign key error 1451
