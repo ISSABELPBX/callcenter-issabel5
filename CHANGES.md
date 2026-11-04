@@ -7,6 +7,12 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.5.40
+
+- New feature: the module's database user is its own `callcenter@localhost` — installer, in-place update, module DSNs, `dialerd.conf` and the dialer's built-in defaults all use it
+- Bug fix: an install no longer grants `call_center` to `asterisk@localhost`, whose `IDENTIFIED BY 'asterisk'` reset that shared account's password
+- Improve: the uninstaller drops `callcenter@localhost` with the database, and only when the user holds no grant on any other database; the `asterisk` account is never touched
+
 ## 5.4.39
 
 - Bug fix: an agent's session ending during an attended transfer ends the client's call, instead of leaving it on hold music or joining it to the colleague

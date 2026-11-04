@@ -23,5 +23,5 @@
 
 $arrConfModule['module_name'] = 'rep_incoming_campaigns_panel';
 $arrConfModule['templates_dir'] = 'themes';
-$arrConfModule['cadena_dsn'] = "mysql://asterisk:asterisk@localhost/call_center";
+$arrConfModule['cadena_dsn'] = "mysql://callcenter:callcenter@localhost/call_center";
 ?>

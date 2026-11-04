@@ -23,5 +23,5 @@
 
 $arrConfModule['module_name'] = 'agent_break';
 $arrConfModule['templates_dir'] = 'themes';
-$arrConfModule['cadena_dsn'] = "mysql://asterisk:asterisk@localhost/call_center";
+$arrConfModule['cadena_dsn'] = "mysql://callcenter:callcenter@localhost/call_center";
 ?>

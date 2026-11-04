@@ -23,7 +23,7 @@
 
 global $arrConfModule;
 $arrConfModule = array(
-    'cadena_dsn' => "mysql://asterisk:asterisk@localhost/call_center",
+    'cadena_dsn' => "mysql://callcenter:callcenter@localhost/call_center",
 );
 
 ?>

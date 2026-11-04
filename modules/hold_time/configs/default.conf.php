@@ -23,5 +23,5 @@
 
 $arrConfModule['module_name'] = 'hold_time';
 $arrConfModule['templates_dir'] = 'themes';
-$arrConfModule['cadena_dsn'] = "mysql://asterisk:asterisk@localhost/call_center";
+$arrConfModule['cadena_dsn'] = "mysql://callcenter:callcenter@localhost/call_center";
 ?>

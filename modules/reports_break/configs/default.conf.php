@@ -25,5 +25,5 @@
 
     $arrConfModule['module_name']       = 'reports_break';
     $arrConfModule['templates_dir']     = 'themes';
-    $arrConfModule['dsn_conn_database'] = 'mysql://asterisk:asterisk@localhost/call_center';
+    $arrConfModule['dsn_conn_database'] = 'mysql://callcenter:callcenter@localhost/call_center';
 ?>
