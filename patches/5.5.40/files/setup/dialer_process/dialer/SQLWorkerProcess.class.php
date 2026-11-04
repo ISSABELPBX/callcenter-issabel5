@@ -171,8 +171,8 @@ class SQLWorkerProcess extends TuberiaProcess
     private function _interpretarConfiguracion($infoConfig)
     {
         $dbHost = 'localhost';
-        $dbUser = 'asterisk';
-        $dbPass = 'asterisk';
+        $dbUser = 'callcenter';
+        $dbPass = 'callcenter';
         if (isset($infoConfig['database']) && isset($infoConfig['database']['dbhost'])) {
             $dbHost = $infoConfig['database']['dbhost'];
             $this->_log->output('Usando host de base de datos: '.$dbHost.' | EN: Using database host: '.$dbHost);

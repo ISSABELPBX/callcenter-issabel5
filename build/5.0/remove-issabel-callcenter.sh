@@ -124,6 +124,21 @@ if [ "$DELETE_DB" = "y" ] || [ "$DELETE_DB" = "Y" ]; then
         else
             echo "Error deleting database. You can delete it manually."
         fi
+        # The module's own database user goes with the database - but only when
+        # nothing else uses it. A box taken over by Call Center Pro keeps this
+        # database, and the user may hold grants on both; SHOW GRANTS decides:
+        # every row except the dropped database's grants and the boilerplate
+        # USAGE means somebody else still needs the user. The asterisk MySQL
+        # account is never touched on any path.
+        OTHER_DB_GRANTS="$(MYSQL_PWD="$MYSQL_ROOT_PWD" mysql -u root -N -B -e \
+            "SHOW GRANTS FOR 'callcenter'@'localhost'" 2>/dev/null \
+            | { grep -v 'ON `call_center`\.' || true; } | { grep -vc 'GRANT USAGE' || true; })"
+        if [ "$(echo "$OTHER_DB_GRANTS" | tr -d '[:space:]')" = "0" ]; then
+            MYSQL_PWD="$MYSQL_ROOT_PWD" mysql -u root -e "DROP USER IF EXISTS 'callcenter'@'localhost'" 2>/dev/null \
+                && echo "Database user callcenter@localhost deleted."
+        else
+            echo "Database user callcenter@localhost kept: it still holds grants on another database."
+        fi
     else
         echo "Could not read MySQL root password"
         echo "You can delete the database manually by dropping call_center database"

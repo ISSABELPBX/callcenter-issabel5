@@ -7,9 +7,9 @@ $config['theme'] = 'default';
 $config['defaultMenu'] = 'config';
 $config['language'] = 'en';
 
-$cadena_dsn = "mysql://asterisk:asterisk@localhost/call_center";
+$cadena_dsn = "mysql://callcenter:callcenter@localhost/call_center";
 */
 $arrConfModule['module_name'] = 'queues';
 $arrConfModule['templates_dir'] = 'themes';
-$arrConfModule['cadena_dsn'] = "mysql://asterisk:asterisk@localhost/call_center";
+$arrConfModule['cadena_dsn'] = "mysql://callcenter:callcenter@localhost/call_center";
 ?>

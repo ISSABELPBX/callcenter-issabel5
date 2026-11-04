@@ -25,6 +25,6 @@
 
     $arrConfModule['module_name']       = 'rep_incoming_calls_monitoring';
     $arrConfModule['templates_dir']     = 'themes';
-    $arrConf['dsn_conn_database'] = 'mysql://asterisk:asterisk@localhost/call_center';
+    $arrConf['dsn_conn_database'] = 'mysql://callcenter:callcenter@localhost/call_center';
 
 ?>

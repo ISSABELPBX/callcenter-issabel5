@@ -24,5 +24,5 @@
 $arrConfModule['module_name'] = 'ingoing_calls_success';
 $arrConfModule['templates_dir'] = 'themes';
 $arrConfModule['theme']           = "default";
-$arrConfModule['cadena_dsn'] = "mysql://asterisk:asterisk@localhost/call_center";
+$arrConfModule['cadena_dsn'] = "mysql://callcenter:callcenter@localhost/call_center";
 ?>

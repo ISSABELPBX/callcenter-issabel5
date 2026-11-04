@@ -23,5 +23,5 @@
 
 $arrConfig['module_name'] = 'cb_extensions';
 $arrConfig['templates_dir'] = 'themes';
-$cadena_dsn = "mysql://asterisk:asterisk@localhost/call_center";
+$cadena_dsn = "mysql://callcenter:callcenter@localhost/call_center";
 ?>

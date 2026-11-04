@@ -25,5 +25,5 @@
   $Id: default.conf.php,v 1.1 2007/01/09 23:49:36 alex Exp $
 */
 $arrConfig['templates_dir'] = 'themes';
-$arrConfig['cadena_dsn'] = "mysql://asterisk:asterisk@localhost/call_center";
+$arrConfig['cadena_dsn'] = "mysql://callcenter:callcenter@localhost/call_center";
 ?>

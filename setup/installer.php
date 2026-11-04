@@ -55,17 +55,30 @@ if (file_exists($path_script_db))
     } else {
         fputs(STDERR, "INFO: call_center database present | Es: base de datos call_center presente\n");
 
-        // STEP 1.1: Ensure asterisk user has permissions on call_center database
-        $bGrantOk = $pDBRoot->genQuery("GRANT ALL ON call_center.* TO asterisk@localhost IDENTIFIED BY 'asterisk'");
-        $bFlushOk = $pDBRoot->genQuery("FLUSH PRIVILEGES");
-        if (!$bGrantOk) {
-            ccStepFail("could not grant on call_center to asterisk@localhost - ".$pDBRoot->errMsg." | Es: no se pudo conceder permisos sobre call_center a asterisk@localhost");
+        // STEP 1.1: Create the module's own database user and grant it on
+        // call_center. Never asterisk: that name belongs to the stock Issabel
+        // MySQL account, and a GRANT ... IDENTIFIED BY on an existing account
+        // also resets its password. The ALTER USER re-pins the password on a
+        // re-install, so a box whose admin changed it gets the shipped one
+        // back with the credentials the DSNs and dialerd.conf carry.
+        $bCreateOk = $pDBRoot->genQuery("CREATE USER IF NOT EXISTS 'callcenter'@'localhost' IDENTIFIED BY 'callcenter'");
+        if (!$bCreateOk) {
+            ccStepFail("could not create the callcenter@localhost database user - ".$pDBRoot->errMsg." | Es: no se pudo crear el usuario de base de datos callcenter@localhost");
         }
+        $bAlterOk = $pDBRoot->genQuery("ALTER USER 'callcenter'@'localhost' IDENTIFIED BY 'callcenter'");
+        if (!$bAlterOk) {
+            ccStepFail("could not set the callcenter@localhost password - ".$pDBRoot->errMsg." | Es: no se pudo fijar la contraseña de callcenter@localhost");
+        }
+        $bGrantOk = $pDBRoot->genQuery("GRANT ALL ON call_center.* TO 'callcenter'@'localhost'");
+        if (!$bGrantOk) {
+            ccStepFail("could not grant on call_center to callcenter@localhost - ".$pDBRoot->errMsg." | Es: no se pudo conceder permisos sobre call_center a callcenter@localhost");
+        }
+        $bFlushOk = $pDBRoot->genQuery("FLUSH PRIVILEGES");
         if (!$bFlushOk) {
             ccStepFail("FLUSH PRIVILEGES failed - ".$pDBRoot->errMsg." | Es: falló FLUSH PRIVILEGES");
         }
-        if ($bGrantOk && $bFlushOk) {
-            fputs(STDERR, "INFO: Granted permissions to asterisk@localhost on call_center database | Es: Permisos concedidos a asterisk@localhost en base de datos call_center\n");
+        if ($bCreateOk && $bAlterOk && $bGrantOk && $bFlushOk) {
+            fputs(STDERR, "INFO: database user callcenter@localhost granted on call_center | Es: usuario de base de datos callcenter@localhost con permisos sobre call_center\n");
         }
 
         // Load the schema. The client reads MYSQL_PWD, so the command line -
