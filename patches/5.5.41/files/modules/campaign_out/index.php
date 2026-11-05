@@ -1,6 +1,5 @@
 <?php
-/*
-  vim: set expandtab tabstop=4 softtabstop=4 shiftwidth=4:
+/* vim: set expandtab tabstop=4 softtabstop=4 shiftwidth=4:
   Codificación: UTF-8
   +----------------------------------------------------------------------+
   | Issabel version 0.5                                                  |
@@ -18,21 +17,25 @@
   | the License for the specific language governing rights and           |
   | limitations under the License.                                       |
   +----------------------------------------------------------------------+
-  | Autores: Alex Villacís Lasso <a_villacis@palosanto.com>              |
-  +----------------------------------------------------------------------+
   | The Initial Developer of the Original Code is PaloSanto Solutions    |
   +----------------------------------------------------------------------+
-  $Id: index.php,v 1.1 2007/01/09 23:49:36 alex Exp $
-*/
+  $Id: new_campaign.php $ */
+
 require_once "libs/paloSantoForm.class.php";
-require_once "libs/paloSantoGrid.class.php";
-require_once "libs/paloSantoConfig.class.php";
-require_once 'libs/paloSantoIncomingCampaign.class.php';
+require_once "libs/paloSantoTrunk.class.php";
+require_once "libs/misc.lib.php";
+include_once "libs/paloSantoConfig.class.php";
+include_once "libs/paloSantoGrid.class.php";
 
 require_once "modules/agent_console/libs/issabel2.lib.php";
 
 function _moduleContent(&$smarty, $module_name)
 {
+    require_once "modules/$module_name/libs/paloSantoCampaignCC.class.php";
+
+    #incluir el archivo de idioma de acuerdo al que este seleccionado
+    #si el archivo de idioma no existe incluir el idioma por defecto
+    $lang=get_language();
     $script_dir=dirname($_SERVER['SCRIPT_FILENAME']);
 
     load_language_module($module_name);
@@ -42,7 +45,6 @@ function _moduleContent(&$smarty, $module_name)
     global $arrConf;
 
     // Se fusiona la configuración del módulo con la configuración global
-    // EN: Module configuration is merged with global configuration
     $arrConf = array_merge($arrConf, $arrConfModule);
 
     //folder path for custom templates
@@ -53,9 +55,11 @@ function _moduleContent(&$smarty, $module_name)
     $smarty->assign("relative_dir_rich_text", $relative_dir_rich_text);
 
     // Conexión a la base de datos CallCenter
+    // EN: CallCenter database connection
     $pDB = new paloDB($arrConf['cadena_dsn']);
 
     // Mostrar pantalla correspondiente
+    // EN: Show corresponding screen
     $contenidoModulo = '';
     $sAction = 'list_campaign';
     if (isset($_GET['action'])) $sAction = $_GET['action'];
@@ -68,6 +72,9 @@ function _moduleContent(&$smarty, $module_name)
         break;
     case 'csv_data':
         $contenidoModulo = displayCampaignCSV($pDB, $smarty, $module_name, $local_templates_dir);
+        break;
+    case 'load_contacts':
+        $contenidoModulo = loadCampaignContacts($pDB, $smarty, $module_name, $local_templates_dir);
         break;
     case 'list_campaign':
     default:
@@ -82,21 +89,23 @@ function listCampaign($pDB, $smarty, $module_name, $local_templates_dir)
 {
     global $arrLang;
     $arrData = array();
-    $oCampaign = new paloSantoIncomingCampaign($pDB);
+    $oCampaign = new paloSantoCampaignCC($pDB);
 
     // Recoger ID de campaña para operación
     $id_campaign = NULL;
-    if (isset($_POST['id_campaign']) && preg_match('/^[[:digit:]]+$/', $_POST['id_campaign']))
+    if (isset($_POST['id_campaign']) && ctype_digit($_POST['id_campaign']))
         $id_campaign = $_POST['id_campaign'];
 
     // Revisar si se debe de borrar una campaña elegida
-    if (isset($_POST['delete']) && !is_null($id_campaign)) {
-        if($oCampaign->delete_campaign($id_campaign)) {
-            if ($oCampaign->errMsg!="") {
-                $smarty->assign("mb_title",_tr('Validation Error'));
-                $smarty->assign("mb_message", $oCampaign->errMsg);
-            } else {
-            }
+    if (isset($_POST['delete'])) {
+        if (is_null($id_campaign)) {
+            // No se ha elegido ninguna campaña con el radio button
+            // EN: No campaign has been chosen with the radio button
+            $smarty->assign("mb_title",_tr('Delete Error'));
+            $smarty->assign("mb_message", _tr('You must select a campaign'));
+        } elseif ($oCampaign->delete_campaign($id_campaign)) {
+            $smarty->assign("mb_title",_tr('Message'));
+            $smarty->assign("mb_message", _tr('Campaign was deleted successfully'));
         } else {
             $msg_error = ($oCampaign->errMsg!="") ? "<br/>".$oCampaign->errMsg:"";
             $smarty->assign("mb_title", _tr('Delete Error'));
@@ -104,28 +113,52 @@ function listCampaign($pDB, $smarty, $module_name, $local_templates_dir)
         }
     }
 
+    // Purgar las llamadas pendientes de la campaña elegida
+    // EN: Purge the pending calls of the chosen campaign
+    if (isset($_POST['purge_pending'])) {
+        if (is_null($id_campaign)) {
+            // No se ha elegido ninguna campaña con el radio button
+            // EN: No campaign has been chosen with the radio button
+            $smarty->assign("mb_title",_tr('Purge Error'));
+            $smarty->assign("mb_message", _tr('You must select a campaign'));
+        } elseif ($oCampaign->purge_pending_calls($id_campaign)) {
+            $smarty->assign("mb_title",_tr('Message'));
+            $smarty->assign("mb_message", _tr('Pending calls were purged successfully'));
+        } else {
+            $msg_error = ($oCampaign->errMsg!="") ? "<br/>".$oCampaign->errMsg:"";
+            $smarty->assign("mb_title",_tr('Purge Error'));
+            $smarty->assign("mb_message", _tr('Error when purging pending calls').$msg_error);
+        }
+    }
+
     // Activar o desactivar campañas elegidas
-    if (isset($_POST['change_status']) && !is_null($id_campaign)){
-        if($_POST['status_campaing_sel']=='activate'){
+    if (isset($_POST['change_status'])){
+        if (is_null($id_campaign)) {
+            // No se ha elegido ninguna campaña con el radio button
+            // EN: No campaign has been chosen with the radio button
+            $smarty->assign("mb_title",_tr('Change Status Error'));
+            $smarty->assign("mb_message", _tr('You must select a campaign'));
+        } elseif($_POST['status_campaing_sel']=='activate'){
             if(!$oCampaign->activar_campaign($id_campaign, 'A')) {
                 $smarty->assign("mb_title", _tr('Activate Error'));
                 $smarty->assign("mb_message", _tr('Error when Activating the Campaign').': '.$oCampaign->errMsg);
             }
         }elseif($_POST['status_campaing_sel']=='deactivate'){
             if(!$oCampaign->activar_campaign($id_campaign, 'I')) {
-                $smarty->assign("mb_title", _tr('Deactivate Error'));
-                $smarty->assign("mb_message", _tr('Error when deactivating the Campaign').': '.$oCampaign->errMsg);
+                $smarty->assign("mb_title", _tr('Desactivate Error'));
+                $smarty->assign("mb_message", _tr('Error when desactivating the Campaign').': '.$oCampaign->errMsg);
             }
         }
     }
 
     // Validar el filtro por estado de actividad de la campaña
     $estados = array(
-        "all" => _tr('All'),
-        "A" => _tr('Active'),
-        "I" => _tr('Inactive')
+        "all" => _tr("All"),
+        "A" => _tr("Active"),
+        "T" => _tr("Finish"),
+        "I" => _tr("Inactive")
     );
-    $sEstado = 'A';
+    $sEstado = 'all';
     if (isset($_GET['cbo_estado']) && isset($estados[$_GET['cbo_estado']])) {
         $sEstado = $_GET['cbo_estado'];
     }
@@ -134,22 +167,17 @@ function listCampaign($pDB, $smarty, $module_name, $local_templates_dir)
     }
 
     // para el pagineo
+    $arrCampaign = $oCampaign->getCampaigns(NULL, NULL, NULL, $sEstado);
+    if (!is_array($arrCampaign)) {
+        $smarty->assign("mb_title", _tr("Error"));
+        $smarty->assign("mb_message", $oCampaign->errMsg);
+        $arrCampaign = array();
+    }
     $oGrid = new paloSantoGrid($smarty);
     $oGrid->setLimit(50);
-    $total = $oCampaign->countCampaigns($sEstado);
-    if (is_null($total)) {
-        $smarty->assign("mb_title", _tr('Read Error'));
-        $smarty->assign("mb_message", _tr('Unable to count campaigns').' - '.$arrCampaign->errMsg);
-        $total = 0;
-    } else {
-        $oGrid->setTotal($total);
-        $offset = $oGrid->calculateOffset();
-        $arrCampaign = $oCampaign->getCampaigns($oGrid->getLimit(), $offset, NULL, $sEstado);
-        if (is_null($arrCampaign)) {
-            $smarty->assign("mb_title", _tr('Read Error'));
-            $smarty->assign("mb_message", _tr('Unable to read campaigns').' - '.$arrCampaign->errMsg);
-        }
-    }
+    $oGrid->setTotal(count($arrCampaign));
+    $offset = $oGrid->calculateOffset();
+    $arrCampaign = array_slice($arrCampaign, $offset, $oGrid->getLimit());
 
     $url = construirURL(
         array('menu' => $module_name, 'cbo_estado' => $sEstado),
@@ -157,36 +185,41 @@ function listCampaign($pDB, $smarty, $module_name, $local_templates_dir)
 
     if (is_array($arrCampaign)) {
         foreach($arrCampaign as $campaign) {
-            $arrTmp    = array();
-            $arrTmp[0] = "<input class=\"button\" type=\"radio\" name=\"id_campaign\" value=\"$campaign[id]\" />";
-            $arrTmp[1] = "<a href='?menu=$module_name&amp;action=edit_campaign&amp;id_campaign=".$campaign['id']."'>".
-                htmlentities($campaign['name'], ENT_COMPAT, 'UTF-8').'</a>';
-            $arrTmp[2] = $campaign['datetime_init'].' - '.$campaign['datetime_end'];
-            $arrTmp[3] = $campaign['daytime_init'].' - '.$campaign['daytime_end'];
-            $arrTmp[4] = $campaign['queue'];
-            $arrTmp[5] = ($campaign['num_completadas']!="") ? $campaign['num_completadas'] : "N/A";
-            $arrTmp[6] = ($campaign['promedio']!="") ? number_format($campaign['promedio'],0) : "N/A";
-
-            if($campaign['estatus']=='I'){
-                $arrTmp[7] = _tr('Inactive');
-            } elseif($campaign['estatus']=='A'){
-                $arrTmp[7] = _tr('Active');
-            }
-            $arrTmp[8] = "<a href='?menu=$module_name&amp;action=csv_data&amp;id_campaign=".$campaign['id']."&amp;rawmode=yes'>["._tr('CSV Data')."]</a>";
-            $arrData[] = $arrTmp;
+            $arrData[] = array(
+                "<input class=\"button\" type=\"radio\" name=\"id_campaign\" value=\"$campaign[id]\" />",
+                "<a href='?menu=$module_name&amp;action=edit_campaign&amp;id_campaign=".$campaign['id']."'>".
+                    htmlentities($campaign['name'], ENT_COMPAT, 'UTF-8').'</a>',
+                $campaign['datetime_init'].' - '.$campaign['datetime_end'],
+                $campaign['daytime_init'].' - '.$campaign['daytime_end'],
+                ($campaign['retries'] != "") ? $campaign['retries'] : "&nbsp;",
+                is_null($campaign['trunk']) ? '(Dialplan)' : $campaign['trunk'],
+                $campaign['queue'],
+                ($campaign['total_calls'] != "") ? $campaign['total_calls'] : "0",
+                ($campaign['pending_calls'] != "") ? $campaign['pending_calls'] : "0",
+                ($campaign['num_completadas'] != "") ? $campaign['num_completadas'] : "N/A",
+                ($campaign['promedio'] != "") ? number_format($campaign['promedio'],0) : "N/A",
+                campaignStatusLabel($campaign['estatus']),
+                "<a href='?menu=$module_name&amp;action=load_contacts&amp;id_campaign=".$campaign['id']."'>["._tr('Load Contacts')."]</a> ".
+                    "<a href='?menu=$module_name&amp;action=csv_data&amp;id_campaign=".$campaign['id']."&amp;rawmode=yes'>["._tr('CSV Data')."]</a>",
+            );
         }
     }
 
     // Definición de la tabla de las campañas
+    // EN: Definition of campaigns table
     $oGrid->setTitle(_tr("Campaigns List"));
     $oGrid->setWidth("99%");
     $oGrid->setIcon("images/list.png");
     $oGrid->setURL($url);
-    $oGrid->setColumns(array('', _tr('Campaign Name'), _tr('Range Date'),
-        _tr('Schedule per Day'), _tr('Queue'), _tr('Completed Calls'),
-        _tr('Average Time'), _tr('Status'), _tr('Options')));
+    $oGrid->setColumns(array('', _tr('Name Campaign'), _tr('Range Date'),
+        _tr('Schedule per Day'), _tr('Retries'), _tr('Trunk'), _tr('Queue'),
+        _tr('Total Calls'), _tr('Pending Calls'), _tr('Completed Calls'), _tr('Average Time'), _tr('Status'), _tr('Options')));
     $_POST['cbo_estado']=$sEstado;
-    $oGrid->addFilterControl(_tr("Filter applied ")._tr("Status")." = ".$estados[$sEstado], $_POST, array("cbo_estado" =>'A'),true);
+    $oGrid->addFilterControl(
+        _tr("Filter applied ")._tr("Status")." = ".$estados[$sEstado],
+        $_POST,
+        array("cbo_estado" =>'all'),
+        TRUE);
     $smarty->assign(array(
         'MODULE_NAME'                   =>  $module_name,
         'LABEL_CAMPAIGN_STATE'          =>  _tr('Campaign state'),
@@ -197,12 +230,44 @@ function listCampaign($pDB, $smarty, $module_name, $local_templates_dir)
     $oGrid->addNew("?menu=$module_name&action=new_campaign", _tr('Create New Campaign'), TRUE);
     $oGrid->addComboAction('status_campaing_sel', _tr("Change Status"), array(
         'activate'      =>  _tr('Activate'),
-        'deactivate'    =>  _tr('Deactivate'),
+        'deactivate'    =>  _tr('Desactivate'),
     ), null, 'change_status');
-    $oGrid->deleteList('Are you sure you wish to delete campaign?', 'delete', _tr('Delete'));
+
+    // Validación en el cliente: debe haber una campaña elegida (radio button)
+    // antes de confirmar cualquier acción por fila
+    // EN: Client-side validation: a campaign must be chosen (radio button)
+    // before confirming any per-row action
+    $js_check_campaign = "var r=document.getElementsByName('id_campaign');var s=false;"
+        ."for(var i=0;i<r.length;i++){if(r[i].checked){s=true;break;}} "
+        ."if(!s){alert('"._tr('You must select a campaign')."');return false;} ";
+
+    // Botón de borrado que valida la selección antes de confirmar. Replica la
+    // salida de deleteList() (icono y color rojo) porque ésta no acepta un
+    // onclick propio y arrActions es privado.
+    // EN: Delete button that validates the selection before confirming.
+    // Replicates deleteList() output (icon and red color) because it accepts
+    // no custom onclick and arrActions is private.
+    $oGrid->addHTMLAction(
+        "<button type=\"submit\" name=\"delete\" value=\""._tr('Delete')."\" class=\"neo-table-toolbar-button\" ".
+        "style=\"background-color:#ec6459; border:1px solid #ec6459;\" ".
+        "onclick=\"".$js_check_campaign."return confirmSubmit('"._tr('Are you sure you wish to delete campaign?')."');\">".
+        "<i class=\"fa fa-eraser\"></i> "._tr('Delete')."</button>");
+
+    $oGrid->addSubmitAction('purge_pending', _tr('Purge Pending Calls'), 'trash-o',
+        $js_check_campaign."return confirmSubmit('"._tr('Are you sure you wish to purge pending calls for this campaign?')."')");
     $oGrid->setData($arrData);
     $oGrid->showFilter($smarty->fetch("$local_templates_dir/filter-list-campaign.tpl"));
     return $oGrid->fetchGrid();
+}
+
+function campaignStatusLabel($st)
+{
+    switch ($st) {
+    case 'A': return _tr('Active');
+    case 'I': return _tr('Inactive');
+    case 'T': return _tr('Finish');
+    default: return '???';
+    }
 }
 
 function newCampaign($pDB, $smarty, $module_name, $local_templates_dir)
@@ -212,11 +277,8 @@ function newCampaign($pDB, $smarty, $module_name, $local_templates_dir)
 
 function editCampaign($pDB, $smarty, $module_name, $local_templates_dir)
 {
-    $id_campaign = NULL;
-    if (isset($_GET['id_campaign']) && ctype_digit($_GET['id_campaign']))
-        $id_campaign = $_GET['id_campaign'];
-    if (isset($_POST['id_campaign']) && ctype_digit($_POST['id_campaign']))
-        $id_campaign = $_POST['id_campaign'];
+    $id_campaign = (isset($_REQUEST['id_campaign']) && ctype_digit($_REQUEST['id_campaign']))
+        ? (int)$_REQUEST['id_campaign'] : NULL;
     if (is_null($id_campaign)) {
         Header("Location: ?menu=$module_name");
         return '';
@@ -227,8 +289,8 @@ function editCampaign($pDB, $smarty, $module_name, $local_templates_dir)
 
 function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id_campaign = NULL)
 {
-    include_once "libs/paloSantoQueue.class.php";
-    include_once "modules/form_designer/libs/paloSantoDataForm.class.php";
+    require_once "libs/paloSantoQueue.class.php";
+    require_once "modules/form_designer/libs/paloSantoDataForm.class.php";
 
     // Si se ha indicado cancelar, volver a listado sin hacer nada más
     if (isset($_POST['cancel'])) {
@@ -240,7 +302,7 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
 
     // Leer los datos de la campaña, si es necesario
     $arrCampaign = NULL;
-    $oCamp = new paloSantoIncomingCampaign($pDB);
+    $oCamp = new paloSantoCampaignCC($pDB);
     if (!is_null($id_campaign)) {
         $arrCampaign = $oCamp->getCampaigns(null, null, $id_campaign);
         if (!is_array($arrCampaign) || count($arrCampaign) == 0) {
@@ -259,6 +321,24 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
         $arrConfig['AMPDBHOST']['valor'] . "/asterisk";
     $oDB = new paloDB($dsn);
 
+    // Leer las troncales que se han definido en FreePBX
+    $arrDataTrunks = array(
+        ''  =>  '('._tr('By Dialplan').')',
+    );
+    $arrTrunks = listarTroncalesCampania($oDB); //obtener la lista de trunks
+    if (is_array($arrTrunks)){
+        foreach($arrTrunks as $trunk) {
+            $arrDataTrunks[$trunk] = $trunk;
+        }
+    }
+    // Conservar la troncal actual de la campaña aunque ya no se liste (troncal
+    // deshabilitada o valor antiguo), para que "Aplicar cambios" no la borre.
+    // EN: Keep the campaign's current trunk even if it is no longer listed
+    // (disabled trunk or an older value), so "Apply changes" does not clear it.
+    if (is_array($arrCampaign) && isset($arrCampaign[0]['trunk']) && $arrCampaign[0]['trunk'] != ''
+        && !isset($arrDataTrunks[$arrCampaign[0]['trunk']]))
+        $arrDataTrunks[$arrCampaign[0]['trunk']] = $arrCampaign[0]['trunk'];
+
     // Leer las colas que se han definido en FreePBX, y quitar las usadas
     // en campañas entrantes.
     $arrDataQueues = array();
@@ -270,10 +350,9 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
         $colasEntrantes = array();
         foreach ($arr_call_entry as $row) $colasEntrantes[] = $row[0];
         foreach($arrQueues as $rowQueue) {
-            if (in_array($rowQueue[0], $colasEntrantes))
+            if (!in_array($rowQueue[0], $colasEntrantes))
                 $arrDataQueues[$rowQueue[0]] = $rowQueue[1];
         }
-        ksort($arrDataQueues);
     }
 
     $arrUrlsExternos = array(
@@ -287,15 +366,15 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
     // Impedir mostrar el formulario si no se han definido colas o no
     // quedan colas libres para usar en campañas salientes.
     if (count($arrQueues) <= 0) {
-        $formCampos = getFormCampaign($arrDataQueues, NULL, NULL, NULL);
+        $formCampos = getFormCampaign($arrDataTrunks, $arrDataQueues, NULL, NULL, NULL);
         $oForm = new paloForm($smarty, $formCampos);
         $smarty->assign('no_queues', 1);
     } elseif (count($arrDataQueues) <= 0) {
-        $formCampos = getFormCampaign($arrDataQueues, NULL, NULL, NULL);
+        $formCampos = getFormCampaign($arrDataTrunks, $arrDataQueues, NULL, NULL, NULL);
         $oForm = new paloForm($smarty, $formCampos);
-        $smarty->assign('no_incoming_queues', 1);
+        $smarty->assign('no_outgoing_queues', 1);
     } elseif (count($arrDataForm) <= 0) {
-        $formCampos = getFormCampaign($arrDataQueues, NULL, NULL, NULL);
+        $formCampos = getFormCampaign($arrDataTrunks, $arrDataQueues, NULL, NULL, NULL);
         $oForm = new paloForm($smarty, $formCampos);
         $smarty->assign('no_forms', 1);
     } else {
@@ -305,18 +384,27 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
         $smarty->assign('label_manage_external_url', _tr('Manage External URLs'));
 
         // Definición del formulario de nueva campaña
-        $smarty->assign("REQUIRED_FIELD", _tr('Required field'));
-        $smarty->assign("CANCEL", _tr('Cancel'));
-        $smarty->assign("SAVE", _tr('Save'));
-        $smarty->assign("APPLY_CHANGES", _tr('Apply changes'));
+        // EN: Definition of new campaign form
+        $smarty->assign("REQUIRED_FIELD", _tr("Required field"));
+        $smarty->assign("CANCEL", _tr("Cancel"));
+        $smarty->assign("SAVE", _tr("Save"));
+        $smarty->assign("APPLY_CHANGES", _tr("Apply changes"));
         $smarty->assign('LABEL_CALL_FILE', _tr('Call File'));
+        $smarty->assign('LABEL_CHANNEL_ZERO_DISABLE', _tr('(Leave as 0 to disable channel limit)'));
 
         // Valores por omisión para primera carga
-        $arrNoElegidos = array();   // Lista de selección de formularios elegibles
-        $arrElegidos = array();     // Lista de selección de formularios ya elegidos
-        $values_form = NULL;        // Selección hecha en el formulario
+        $arrNoElegidos = array();   // Lista de selección de formularios elegibles // EN: Selection list of eligible forms
+        $arrElegidos = array();     // Lista de selección de formularios ya elegidos // EN: Selection list of already chosen forms
+        $values_form = NULL;        // Selección hecha en el formulario // EN: Selection made in form
         if (is_null($id_campaign)) {
             if (!isset($_POST['nombre'])) $_POST['nombre']='';
+            if (!isset($_POST["context"]) || $_POST["context"]=="") {
+                $_POST["context"] = "from-internal";
+            }
+            if (!isset($_POST['max_canales']) || $_POST['max_canales'] == '')
+                $_POST['max_canales'] = 0;
+            if (!isset($_POST['reintentos']) || $_POST['reintentos'] == '')
+                $_POST['reintentos'] = 5;
             if (!isset($_POST['rte_script'])) $_POST['rte_script'] = '';
             if (!isset($_POST['values_form'])) $_POST['values_form'] = '';
             //$_POST['formulario']= explode(",", $_POST['values_form']);
@@ -332,19 +420,20 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
             if (!isset($_POST['hora_ini_MM']))  $_POST['hora_ini_MM']  = isset($arrDateTimeInit[1])?$arrDateTimeInit[1]:"00";
             if (!isset($_POST['hora_fin_HH']))  $_POST['hora_fin_HH']  = isset($arrDateTimeEnd[0])?$arrDateTimeEnd[0]:"00";
             if (!isset($_POST['hora_fin_MM']))  $_POST['hora_fin_MM']  = isset($arrDateTimeEnd[1])?$arrDateTimeEnd[1]:"00";
+            if (!isset($_POST['reintentos']))   $_POST['reintentos']   = $arrCampaign[0]['retries'];
+            if (!isset($_POST['trunk']))        $_POST['trunk']        = $arrCampaign[0]['trunk'];
             if (!isset($_POST['queue']))        $_POST['queue']        = $arrCampaign[0]['queue'];
+            if (!isset($_POST['context']))      $_POST['context']      = $arrCampaign[0]['context'];
+            if (!isset($_POST['max_canales']))  $_POST['max_canales']  = $arrCampaign[0]['max_canales'];
             //$_POST['script'] = "";
             if (!isset($_POST['rte_script']))   $_POST['rte_script'] = $arrCampaign[0]['script'];
             //if (!isset($_POST['formulario']))           $_POST['formulario'] = "";
             //if (!isset($_POST['formularios_elegidos'])) $_POST['formularios_elegidos'] = "";
             if (!isset($_POST['values_form'])) {
                 $values_form = $oCamp->obtenerCampaignForm($id_campaign);
-                if (!is_null($arrCampaign[0]['id_form']) && !in_array($arrCampaign[0]['id_form'], $values_form))
-                    $values_form[] = $arrCampaign[0]['id_form'];
             } else {
                 $values_form = explode(",", $_POST['values_form']);
             }
-                //var_dump($arrCampaign);
             if (!isset($_POST['external_url']))        $_POST['external_url']        = $arrCampaign[0]['id_url'];
             if (!isset($_POST['external_url2']))        $_POST['external_url2']        = $arrCampaign[0]['id_url2'];
             if (!isset($_POST['external_url3']))        $_POST['external_url3']        = $arrCampaign[0]['id_url3'];
@@ -362,7 +451,9 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
         }
 
         // Generación del objeto de formulario
-        $formCampos = getFormCampaign($arrDataQueues, $arrNoElegidos, $arrElegidos, $arrUrlsExternos);
+        // EN: Form object generation
+        $formCampos = getFormCampaign($arrDataTrunks, $arrDataQueues,
+            $arrNoElegidos, $arrElegidos, $arrUrlsExternos);
         $oForm = new paloForm($smarty, $formCampos);
         if (!is_null($id_campaign)) {
             $oForm->setEditMode();
@@ -377,7 +468,7 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
         if ($bDoCreate || $bDoUpdate) {
             if(!$oForm->validateForm($_POST) || (!isset($_POST['rte_script']) || $_POST['rte_script']=='')) {
                 // Falla la validación básica del formulario
-                $smarty->assign("mb_title", _tr('Validation Error'));
+                $smarty->assign("mb_title", _tr("Validation Error"));
                 $arrErrores=$oForm->arrErroresValidacion;
                 $strErrorMsg = "<b>"._tr('The following fields contain errors').":</b><br/>";
                 if(is_array($arrErrores) && count($arrErrores) > 0){
@@ -386,9 +477,15 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
                     }
                 }
                 if(!isset($_POST['rte_script']) || $_POST['rte_script']=='')
-                    $strErrorMsg .= _tr('Script');
+                    $strErrorMsg .= _tr("Script");
                 $strErrorMsg .= "";
                 $smarty->assign("mb_message", $strErrorMsg);
+            } elseif ($_POST['max_canales'] < 0) {
+                $smarty->assign("mb_title", _tr("Validation Error"));
+                $smarty->assign("mb_message", _tr('At least 1 used channel must be allowed.'));
+            } elseif ((int)$_POST['reintentos'] <= 0) {
+                $smarty->assign("mb_title", _tr("Validation Error"));
+                $smarty->assign("mb_message", _tr('Campaign must allow at least one call retry'));
             } else {
                 $time_ini = $_POST['hora_ini_HH'].":".$_POST['hora_ini_MM'];
                 $time_fin = $_POST['hora_fin_HH'].":".$_POST['hora_fin_MM'];
@@ -397,73 +494,83 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
                 $iHoraIni =  strtotime($time_ini);
                 $iHoraFin =  strtotime($time_fin);
                 if ($iFechaIni == -1 || $iFechaIni === FALSE) {
-                    $smarty->assign("mb_title", _tr('Validation Error'));
+                    $smarty->assign("mb_title", _tr("Validation Error"));
                     $smarty->assign("mb_message", _tr('Unable to parse start date specification'));
                 } elseif ($iFechaFin == -1 || $iFechaFin === FALSE) {
-                    $smarty->assign("mb_title", _tr('Validation Error'));
+                    $smarty->assign("mb_title", _tr("Validation Error"));
                     $smarty->assign("mb_message", _tr('Unable to parse end date specification'));
                 } elseif ($iHoraIni == -1 || $iHoraIni === FALSE) {
-                    $smarty->assign("mb_title", _tr('Validation Error'));
+                    $smarty->assign("mb_title", _tr("Validation Error"));
                     $smarty->assign("mb_message", _tr('Unable to parse start time specification'));
                 } elseif ($iHoraFin == -1 || $iHoraFin === FALSE) {
-                    $smarty->assign("mb_title", _tr('Validation Error'));
+                    $smarty->assign("mb_title", _tr("Validation Error"));
                     $smarty->assign("mb_message", _tr('Unable to parse end time specification'));
                 } else {
 
-                    if(!$pDB->genQuery("SET AUTOCOMMIT=0")) {
-                        $smarty->assign("mb_message", $pDB->errMsg);
-                    } else {
-                        $bExito = TRUE;
+                    $pDB->beginTransaction();
+                    $bExito = TRUE;
+                    if ($bDoCreate) {
+                        $id_campaign = $oCamp->createEmptyCampaign(
+                            $_POST['nombre'],
+                            $_POST['max_canales'],
+                            $_POST['reintentos'],
+                            $_POST['trunk'],
+                            $_POST['context'],
+                            $_POST['queue'],
+                            date('Y-m-d', $iFechaIni),
+                            date('Y-m-d', $iFechaFin),
+                            $time_ini,
+                            $time_fin,
+                            $_POST['rte_script'],
+                            ($_POST['external_url'] == '') ? NULL : $_POST['external_url'],
+                            ($_POST['external_url2'] == '') ? NULL : $_POST['external_url2'],
+                            ($_POST['external_url3'] == '') ? NULL : $_POST['external_url3']);
+                        if (is_null($id_campaign)) $bExito = FALSE;
+                    } elseif ($bDoUpdate) {
+                        $bExito = $oCamp->updateCampaign(
+                            $id_campaign,
+                            $_POST['nombre'],
+                            $_POST['max_canales'],
+                            $_POST['reintentos'],
+                            $_POST['trunk'],
+                            $_POST['context'],
+                            $_POST['queue'],
+                            date('Y-m-d', $iFechaIni),
+                            date('Y-m-d', $iFechaFin),
+                            $time_ini,
+                            $time_fin,
+                            $_POST['rte_script'],
+                            ($_POST['external_url'] == '') ? NULL : $_POST['external_url'],
+                            ($_POST['external_url2'] == '') ? NULL : $_POST['external_url2'],
+                            ($_POST['external_url3'] == '') ? NULL : $_POST['external_url3']);
+                    }
+
+                    // Introducir o actualizar formularios
+                    if ($bExito && isset($_POST['values_form'])) {
                         if ($bDoCreate) {
-                            $id_campaign = $oCamp->createEmptyCampaign(
-                                            $_POST['nombre'],
-                                            $_POST['queue'],
-                                            date('Y-m-d', $iFechaIni),
-                                            date('Y-m-d', $iFechaFin),
-                                            $time_ini,
-                                            $time_fin,
-                                            $_POST['rte_script'],
-                                            NULL,
-                                            ($_POST['external_url'] == '') ? NULL : $_POST['external_url'],
-                                            ($_POST['external_url2'] == '') ? NULL : $_POST['external_url2'],
-                                            ($_POST['external_url3'] == '') ? NULL : $_POST['external_url3']);
-                            if (is_null($id_campaign)) $bExito = FALSE;
+                            $bExito = $oCamp->addCampaignForm($id_campaign, $_POST['values_form']);
                         } elseif ($bDoUpdate) {
-                            $bExito = $oCamp->updateCampaign(
-                                            $id_campaign,
-                                            $_POST['nombre'],
-                                            $_POST['queue'],
-                                            date('Y-m-d', $iFechaIni),
-                                            date('Y-m-d', $iFechaFin),
-                                            $time_ini,
-                                            $time_fin,
-                                            $_POST['rte_script'],
-                                            NULL,
-                                            ($_POST['external_url'] == '') ? NULL : $_POST['external_url'],
-                                            ($_POST['external_url2'] == '') ? NULL : $_POST['external_url2'],
-                                            ($_POST['external_url3'] == '') ? NULL : $_POST['external_url3']);
-                        }
-
-                        // Introducir o actualizar formularios
-                        if ($bExito) {
-                            if ($bDoCreate) {
-                                $bExito = $oCamp->addCampaignForm($id_campaign, $values_form);
-                            } elseif ($bDoUpdate) {
-                                $bExito = $oCamp->updateCampaignForm($id_campaign, $values_form);
-                            }
-                        }
-
-                        // Confirmar o deshacer la transacción según sea apropiado
-                        if ($bExito) {
-                            $pDB->genQuery("COMMIT");
-                            header("Location: ?menu=$module_name");
-                        } else {
-                            $pDB->genQuery("ROLLBACK");
-                            $smarty->assign("mb_title", _tr('Validation Error'));
-                            $smarty->assign("mb_message", $oCamp->errMsg);
+                            $bExito = $oCamp->updateCampaignForm($id_campaign, $_POST['values_form']);
                         }
                     }
-                    $pDB->genQuery("SET AUTOCOMMIT=1");
+
+                    if ($bExito && $bDoCreate) {
+                        /* La campaña se crea vacía e inactiva para tener la
+                         * oportunidad de llenar contactos antes de activarla.
+                         */
+                        $bExito = $oCamp->activar_campaign($id_campaign, 'I');
+                    }
+
+                    // Confirmar o deshacer la transacción según sea apropiado
+                    if ($bExito) {
+                        $pDB->commit();
+                        Header("Location: ?menu=$module_name");
+                        return '';
+                    } else {
+                        $pDB->rollBack();
+                        $smarty->assign("mb_title", _tr("Validation Error"));
+                        $smarty->assign("mb_message", $oCamp->errMsg);
+                    }
                 }
             }
         }
@@ -472,13 +579,149 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
     $smarty->assign('icon', 'images/kfaxview.png');
     $contenidoModulo = $oForm->fetchForm(
         "$local_templates_dir/new.tpl",
-        is_null($id_campaign) ? _tr('New Campaign') : _tr('Edit Campaign').' "'.$_POST['nombre'].'"',
+        is_null($id_campaign) ? _tr("New Campaign") : _tr("Edit Campaign").' "'.$_POST['nombre'].'"',
         $_POST);
     return $contenidoModulo;
 }
 
-function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
-    $arrUrlsExternos)
+function loadCampaignContacts($pDB, $smarty, $module_name, $local_templates_dir)
+{
+    require_once "modules/$module_name/libs/paloContactInsert.class.php";
+
+    $id_campaign = (isset($_REQUEST['id_campaign']) && ctype_digit($_REQUEST['id_campaign']))
+        ? (int)$_REQUEST['id_campaign'] : NULL;
+    if (is_null($id_campaign)) {
+        Header("Location: ?menu=$module_name");
+        return '';
+    }
+
+    // Si se ha indicado cancelar, volver a listado sin hacer nada más
+    if (isset($_POST['cancel'])) {
+        Header("Location: ?menu=$module_name");
+        return '';
+    }
+
+    // Leer los datos de la campaña, si es necesario
+    $oCamp = new paloSantoCampaignCC($pDB);
+    $arrCampaign = $oCamp->getCampaigns(null, null, $id_campaign);
+    if (!is_array($arrCampaign) || count($arrCampaign) == 0) {
+        $smarty->assign("mb_title", 'Unable to read campaign');
+        $smarty->assign("mb_message", 'Cannot read campaign - '.$oCamp->errMsg);
+        return '';
+    }
+    $smarty->assign(array(
+        'id_campaign'                   =>  $id_campaign,
+        'FRAMEWORK_TIENE_TITULO_MODULO' =>  existeSoporteTituloFramework(),
+        'REQUIRED_FIELD'                =>  _tr("Required field"),
+        'CANCEL'                        =>  _tr("Cancel"),
+        'SAVE'                          =>  _tr("Save"),
+        'LBL_OPTIONS_UPLOADER'          =>  _tr('Options for').': ',
+        'LBL_UPLOADERS'                 =>  _tr('Available uploaders'),
+        'icon'                          =>  'images/kfaxview.png',
+    ));
+
+    // Construir lista de todos los cargadores conocidos
+    $listuploaders = array();
+    $uploadersdir = "modules/$module_name/uploaders";
+    foreach (scandir("$uploadersdir/") as $uploader) {
+        if ($uploader != '.' && $uploader != '..' && is_dir("$uploadersdir/$uploader")) {
+            $listuploaders[$uploader] = $uploader;
+        }
+    }
+
+    // Carga de todas las funciones auxiliares de los diálogos
+    foreach ($listuploaders as $uploader) {
+        if (file_exists("modules/$module_name/uploaders/$uploader/index.php")) {
+            if (file_exists("modules/$module_name/uploaders/$uploader/lang/en.lang"))
+                load_language_module("$module_name/uploaders/$uploader");
+            require_once "modules/$module_name/uploaders/$uploader/index.php";
+        }
+    }
+
+    $oForm = new paloForm($smarty, array(
+        'uploader'          =>  array(
+            'LABEL'                     =>  _tr('Available uploaders'),
+            'REQUIRED'                  =>  'yes',
+            'INPUT_TYPE'                =>  'SELECT',
+            'INPUT_EXTRA_PARAM'         =>  $listuploaders,
+            'VALIDATION_TYPE'           =>  'text',
+            'VALIDATION_EXTRA_PARAM'    =>  '',
+            'ONCHANGE'                  =>  'submit();',
+        ),
+    ));
+
+    $selected_uploader = isset($_REQUEST['uploader']) ? $_REQUEST['uploader'] : 'CSV';
+    if (!in_array($selected_uploader, $listuploaders)) $selected_uploader = 'CSV';
+
+    $classname = 'Uploader_'.$selected_uploader;
+    $method = (isset($_REQUEST['uploader_action']) && method_exists($classname, 'handleJSON_'.$_REQUEST['uploader_action']))
+        ? 'handleJSON_'.$_REQUEST['uploader_action'] : 'main';
+    $h = array($classname, $method);
+    $r = call_user_func($h, $module_name, $smarty, realpath($local_templates_dir.'/../../uploaders/'.$selected_uploader.'/tpl'), $pDB);
+    if ($method != 'main') return $r;
+
+    $smarty->assign('CONTENT_UPLOADER', $r);
+    $smarty->assign('LBL_OPTIONS_UPLOADER', _tr('Options for').': '.htmlentities($selected_uploader, ENT_COMPAT, 'UTF-8'));
+    return $oForm->fetchForm(
+        "$local_templates_dir/load_contacts.tpl",
+        _tr("Load Contacts for Campaign").': '.$arrCampaign[0]['name'],
+        $_POST);
+}
+
+/**
+ * Lista las troncales de IssabelPBX con la cadena que el dialer necesita.
+ * EN: Lists the IssabelPBX trunks with the string the dialer needs.
+ *
+ * getTrunks() (libs/paloSantoTrunk.class.php) quita '$OUTNUM$@' de las
+ * troncales personalizadas porque los reportes comparan contra canales del
+ * CDR, pero el dialer necesita la plantilla completa: con 'Local/salida' en
+ * lugar de 'Local/$OUTNUM$@salida' no puede marcar. Aquí se conserva tal cual.
+ * EN: getTrunks() strips '$OUTNUM$@' from custom trunks because the reports
+ * compare against CDR channels, but the dialer needs the full template: with
+ * 'Local/salida' instead of 'Local/$OUTNUM$@salida' it cannot dial. The
+ * template is kept as-is here.
+ *
+ * Se omiten las troncales que el dialer no puede originar (ENUM, DUNDi y las
+ * personalizadas sin $OUTNUM$); para ellas se usa "Por plan de marcado".
+ * EN: Trunks the dialer cannot originate on (ENUM, DUNDi, custom trunks
+ * without $OUTNUM$) are left out; use "By Dialplan" for those.
+ */
+function listarTroncalesCampania($oDB)
+{
+    $r = $oDB->fetchTable("SHOW TABLES LIKE 'trunks'");
+    if (!is_array($r) || count($r) <= 0) {
+        // IssabelPBX antiguo sin tabla trunks
+        // EN: Old IssabelPBX without a trunks table
+        $lista = array();
+        $t = getTrunks($oDB);
+        if (is_array($t)) foreach ($t as $tupla) $lista[] = $tupla[1];
+        return $lista;
+    }
+    $r = $oDB->fetchTable(
+        "SELECT tech, channelid FROM trunks WHERE disabled IS NULL OR disabled <> 'on' ORDER BY trunkid", TRUE);
+    if (!is_array($r)) return NULL;
+    $lista = array();
+    foreach ($r as $tupla) {
+        $tech = strtolower($tupla['tech']);
+        $chan = $tupla['channelid'];
+        if ($tech == 'custom') {
+            $chan = preg_replace('|^AMP:|', '', $chan);
+            if (stripos($chan, '$OUTNUM$') !== FALSE) $lista[] = $chan;
+        } elseif ($tech == 'enum' || $tech == 'dundi') {
+            continue;
+        } elseif ($tech == 'iax' || $tech == 'iax2') {
+            $lista[] = 'IAX2/'.$chan;
+        } elseif ($tech == 'zap' || $tech == 'dahdi') {
+            $lista[] = 'DAHDI/'.$chan;
+        } else {
+            $lista[] = strtoupper($tech).'/'.$chan;
+        }
+    }
+    return $lista;
+}
+
+function getFormCampaign($arrDataTrunks, $arrDataQueues, $arrSelectForm,
+    $arrSelectFormElegidos, $arrUrlsExternos)
 {
     $horas = array();
     $i = 0;
@@ -500,7 +743,7 @@ function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
 
     $formCampos = array(
         'nombre'    =>    array(
-            "LABEL"                => _tr('Name Campaign'),
+            "LABEL"                => _tr("Name Campaign"),
             "REQUIRED"               => "yes",
             "INPUT_TYPE"             => "TEXT",
             "INPUT_EXTRA_PARAM"      => "",
@@ -508,8 +751,24 @@ function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
             "VALIDATION_EXTRA_PARAM" => "",
         ),
 
+        'trunk'       => array(
+            "LABEL"                  => _tr("Trunk"),
+            "REQUIRED"               => "no",
+            "INPUT_TYPE"             => "SELECT",
+            "INPUT_EXTRA_PARAM"      => $arrDataTrunks,
+            "VALIDATION_TYPE"        => "text",
+            "VALIDATION_EXTRA_PARAM" => ""
+        ),
+        "max_canales" => array(
+            "LABEL"                  => _tr('Max. used channels'),
+            "REQUIRED"               => "yes",
+            "INPUT_TYPE"             => "TEXT",
+            "INPUT_EXTRA_PARAM"      => "",
+            "VALIDATION_TYPE"        => "numeric",
+            "VALIDATION_EXTRA_PARAM" => ""
+        ),
         "fecha_str"       => array(
-            "LABEL"                  => _tr('Range Date'),
+            "LABEL"                  => _tr("Range Date"),
             "REQUIRED"               => "yes",
             "INPUT_TYPE"             => "",
             "INPUT_EXTRA_PARAM"      => "",
@@ -517,7 +776,7 @@ function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
             "VALIDATION_EXTRA_PARAM" => ''
         ),
         "fecha_ini"       => array(
-            "LABEL"                  => _tr('Start'),
+            "LABEL"                  => _tr("Start"),
             "REQUIRED"               => "yes",
             "INPUT_TYPE"             => "DATE",
             "INPUT_EXTRA_PARAM"      => array("TIME" => false, "FORMAT" => "%d %b %Y"),
@@ -525,7 +784,7 @@ function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
             "VALIDATION_EXTRA_PARAM" => '^[[:digit:]]{2}[[:space:]]+[[:alpha:]]{3}[[:space:]]+[[:digit:]]{4}$'
         ),
         "fecha_fin"       => array(
-            "LABEL"                  => _tr('End'),
+            "LABEL"                  => _tr("End"),
             "REQUIRED"               => "yes",
             "INPUT_TYPE"             => "DATE",
             "INPUT_EXTRA_PARAM"      => array("TIME" => false, "FORMAT" => "%d %b %Y"),
@@ -533,7 +792,7 @@ function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
             "VALIDATION_EXTRA_PARAM" => '^[[:digit:]]{2}[[:space:]]+[[:alpha:]]{3}[[:space:]]+[[:digit:]]{4}$'
         ),
         "hora_str"       => array(
-            "LABEL"                  => _tr('Schedule per Day'),
+            "LABEL"                  => _tr("Schedule per Day"),
             "REQUIRED"               => "yes",
             "INPUT_TYPE"             => "",
             "INPUT_EXTRA_PARAM"      => "",
@@ -542,7 +801,7 @@ function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
             "VALIDATION_EXTRA_PARAM" => ''
         ),
         "hora_ini_HH"   => array(
-            "LABEL"                  => _tr('Start time'),
+            "LABEL"                  => _tr("Start time"),
             "REQUIRED"               => "yes",
             "INPUT_TYPE"             => "SELECT",
             "INPUT_EXTRA_PARAM"      => $horas,
@@ -550,7 +809,7 @@ function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
             "VALIDATION_EXTRA_PARAM" => '',
          ),
         "hora_ini_MM"   => array(
-            "LABEL"                  => _tr('Start time'),
+            "LABEL"                  => _tr("Start time"),
             "REQUIRED"               => "yes",
             "INPUT_TYPE"             => "SELECT",
             "INPUT_EXTRA_PARAM"      => $minutos,
@@ -558,7 +817,7 @@ function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
             "VALIDATION_EXTRA_PARAM" => '',
          ),
          "hora_fin_HH"   => array(
-            "LABEL"                  => _tr('End time'),
+            "LABEL"                  => _tr("End time"),
             "REQUIRED"               => "yes",
             "INPUT_TYPE"             => "SELECT",
             "INPUT_EXTRA_PARAM"      => $horas,
@@ -566,7 +825,7 @@ function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
             "VALIDATION_EXTRA_PARAM" => '',
          ),
          "hora_fin_MM"   => array(
-            "LABEL"                  => _tr('End time'),
+            "LABEL"                  => _tr("End time"),
             "REQUIRED"               => "yes",
             "INPUT_TYPE"             => "SELECT",
             "INPUT_EXTRA_PARAM"      => $minutos,
@@ -574,7 +833,7 @@ function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
             "VALIDATION_EXTRA_PARAM" => '',
          ),
          'formulario'       => array(
-            "LABEL"                  => _tr('Form'),
+            "LABEL"                  => _tr("Form"),
             "REQUIRED"               => "yes",
             "INPUT_TYPE"             => "SELECT",
             "INPUT_EXTRA_PARAM"      => $arrSelectForm,
@@ -584,7 +843,7 @@ function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
             "SIZE"                   => "5"
         ),
         'formularios_elegidos'       => array(
-            "LABEL"                  => _tr('Form'),
+            "LABEL"                  => _tr("Form"),
             "REQUIRED"               => "yes",
             "INPUT_TYPE"             => "SELECT",
             "INPUT_EXTRA_PARAM"      => $arrSelectFormElegidos,
@@ -593,8 +852,24 @@ function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
             "MULTIPLE"               => true,
             "SIZE"                   => "5"
         ),
+        "reintentos" => array(
+            "LABEL"                  => _tr("Retries"),
+            "REQUIRED"               => "yes",
+            "INPUT_TYPE"             => "TEXT",
+            "INPUT_EXTRA_PARAM"      => "",
+            "VALIDATION_TYPE"        => "numeric",
+            "VALIDATION_EXTRA_PARAM" => ""
+        ),
+        "context" => array(
+            "LABEL"                  => _tr("Context"),
+            "REQUIRED"               => "yes",
+            "INPUT_TYPE"             => "TEXT",
+            "INPUT_EXTRA_PARAM"      => "",
+            "VALIDATION_TYPE"        => "",
+            "VALIDATION_EXTRA_PARAM" => ""
+        ),
         "queue" => array(
-            "LABEL"                  => _tr('Queue'),
+            "LABEL"                  => _tr("Queue"),
             "REQUIRED"               => "yes",
             "INPUT_TYPE"             => "SELECT",
             "INPUT_EXTRA_PARAM"      => $arrDataQueues,
@@ -602,7 +877,7 @@ function getFormCampaign($arrDataQueues, $arrSelectForm, $arrSelectFormElegidos,
             "VALIDATION_EXTRA_PARAM" => ""
         ),
         "script" => array(
-            "LABEL"                  => _tr('Script'),
+            "LABEL"                  => _tr("Script"),
             "REQUIRED"               => "yes",
             "INPUT_TYPE"             => "TEXT",
             "INPUT_EXTRA_PARAM"      => "",
@@ -684,7 +959,7 @@ function displayCampaignCSV($pDB, $smarty, $module_name, $local_templates_dir)
     ini_set('max_execution_time', 3600);
 
     // Leer los datos de la campaña, si es necesario
-    $oCamp = new paloSantoIncomingCampaign($pDB);
+    $oCamp = new paloSantoCampaignCC($pDB);
     $arrCampaign = $oCamp->getCampaigns(null, null, $id_campaign);
     if (!is_array($arrCampaign) || count($arrCampaign) == 0) {
         $smarty->assign("mb_title", 'Unable to read campaign');
@@ -716,7 +991,7 @@ function displayCampaignCSV($pDB, $smarty, $module_name, $local_templates_dir)
                 $lineaCSV = array_merge($lineaCSV, array_map('csv_replace', $datosCampania['FORMS'][$id_form]['LABEL']));
                 $lineaEspaciador = array_merge(
                     $lineaEspaciador,
-                    array_fill(0, count($datosCampania['FORMS'][$id_form]['LABEL']), '""'._tr('Form').'"'));
+                    array_fill(0, count($datosCampania['FORMS'][$id_form]['LABEL']), csv_replace(_tr('Form'))));
             }
             $sDatosCSV .= join(',', $lineaEspaciador)."\r\n";
             $sDatosCSV .= join(',', $lineaCSV)."\r\n";
@@ -747,6 +1022,5 @@ function displayCampaignCSV($pDB, $smarty, $module_name, $local_templates_dir)
 
     return $sDatosCSV;
 }
-
 
 ?>

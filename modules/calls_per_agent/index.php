@@ -218,7 +218,11 @@ function _moduleContent(&$smarty, $module_name)
 
     $table = $agentTable;
 
-    if ($inbound) {
+    // En una exportación (CSV/XLS/PDF) solo va la tabla, sin gráficos HTML
+    // EN: An export (CSV/XLS/PDF) carries only the table, not the HTML graphs
+    if ($oGrid->isExportAction()) return $table;
+
+    if (!empty($inbound)) {
         $inboundGraph = callsGraphics($arrDataInbound, "inbound");
         $table .= "<div style='text-align: center; padding: 20px; border: solid; border-radius: 10px;'>";
         $table .= "<h2 style='color: #333;'>Inbound Campaigns</h2>";
@@ -226,7 +230,7 @@ function _moduleContent(&$smarty, $module_name)
         $table .= "</div>";
         $table .= "<br>";
     }
-    if ($outbound){
+    if (!empty($outbound)){
         $outboundGraph = callsGraphics($arrDataOutbound, "outbound");
         $table .= "<div style='text-align: center; padding: 20px; border: solid; border-radius: 10px;'>";
         $table .= "<h2 style='color: #333;'>Outbound Campaigns</h2>";
