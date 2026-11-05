@@ -2027,6 +2027,14 @@ PETICION_LLAMADAS_AGENTE;
                         'channelid' => $camposTrunk[1]
                     );
                 }
+                // IssabelPBX guarda las troncales IAX con tech='iax', pero se marcan como IAX2/
+                // EN: IssabelPBX stores IAX trunks with tech='iax', but they are dialed as IAX2/
+                if ($listaIntentos[0]['tech'] == 'iax2') {
+                    $listaIntentos[] = array(
+                        'tech'      => 'iax',
+                        'channelid' => $camposTrunk[1]
+                    );
+                }
                 $sPeticionSQL =
                     'SELECT outcid AS CID, dialoutprefix AS PREFIX '.
                     'FROM trunks WHERE tech = ? AND channelid = ?';

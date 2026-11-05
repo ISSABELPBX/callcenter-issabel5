@@ -376,8 +376,9 @@ function closeModal() {
 }
 </script>
 MODAL;
-        // Append modal to the end
-        $gridContent .= $modalHtml;
+        // Agregar el modal al final (no en exportaciones CSV/PDF/XLS)
+        // EN: Append modal to the end (not to CSV/PDF/XLS exports)
+        if (!$bExportando) $gridContent .= $modalHtml;
         return $gridContent;
      } else {
         global $arrLang;
