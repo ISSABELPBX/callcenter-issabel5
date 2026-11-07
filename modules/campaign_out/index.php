@@ -88,7 +88,7 @@ function _moduleContent(&$smarty, $module_name)
 function listCampaign($pDB, $smarty, $module_name, $local_templates_dir)
 {
     global $arrLang;
-    $arrData[] = '';
+    $arrData = array();
     $oCampaign = new paloSantoCampaignCC($pDB);
 
     // Recoger ID de campaña para operación
@@ -168,6 +168,11 @@ function listCampaign($pDB, $smarty, $module_name, $local_templates_dir)
 
     // para el pagineo
     $arrCampaign = $oCampaign->getCampaigns(NULL, NULL, NULL, $sEstado);
+    if (!is_array($arrCampaign)) {
+        $smarty->assign("mb_title", _tr("Error"));
+        $smarty->assign("mb_message", $oCampaign->errMsg);
+        $arrCampaign = array();
+    }
     $oGrid = new paloSantoGrid($smarty);
     $oGrid->setLimit(50);
     $oGrid->setTotal(count($arrCampaign));
@@ -320,12 +325,19 @@ function formEditCampaign($pDB, $smarty, $module_name, $local_templates_dir, $id
     $arrDataTrunks = array(
         ''  =>  '('._tr('By Dialplan').')',
     );
-    $arrTrunks = getTrunks($oDB); //obtener la lista de trunks
+    $arrTrunks = listarTroncalesCampania($oDB); //obtener la lista de trunks
     if (is_array($arrTrunks)){
         foreach($arrTrunks as $trunk) {
-            $arrDataTrunks[$trunk[1]] = $trunk[1];
+            $arrDataTrunks[$trunk] = $trunk;
         }
     }
+    // Conservar la troncal actual de la campaña aunque ya no se liste (troncal
+    // deshabilitada o valor antiguo), para que "Aplicar cambios" no la borre.
+    // EN: Keep the campaign's current trunk even if it is no longer listed
+    // (disabled trunk or an older value), so "Apply changes" does not clear it.
+    if (is_array($arrCampaign) && isset($arrCampaign[0]['trunk']) && $arrCampaign[0]['trunk'] != ''
+        && !isset($arrDataTrunks[$arrCampaign[0]['trunk']]))
+        $arrDataTrunks[$arrCampaign[0]['trunk']] = $arrCampaign[0]['trunk'];
 
     // Leer las colas que se han definido en FreePBX, y quitar las usadas
     // en campañas entrantes.
@@ -656,6 +668,59 @@ function loadCampaignContacts($pDB, $smarty, $module_name, $local_templates_dir)
         $_POST);
 }
 
+/**
+ * Lista las troncales de IssabelPBX con la cadena que el dialer necesita.
+ * EN: Lists the IssabelPBX trunks with the string the dialer needs.
+ *
+ * getTrunks() (libs/paloSantoTrunk.class.php) quita '$OUTNUM$@' de las
+ * troncales personalizadas porque los reportes comparan contra canales del
+ * CDR, pero el dialer necesita la plantilla completa: con 'PJSIP/proveedor'
+ * en lugar de 'PJSIP/$OUTNUM$@proveedor' no puede marcar. Aquí se conserva
+ * tal cual.
+ * EN: getTrunks() strips '$OUTNUM$@' from custom trunks because the reports
+ * compare against CDR channels, but the dialer needs the full template: with
+ * 'PJSIP/provider' instead of 'PJSIP/$OUTNUM$@provider' it cannot dial. The
+ * template is kept as-is here.
+ *
+ * Solo se ofrecen las troncales que el dialer soporta: SIP, PJSIP, DAHDI/ZAP
+ * y las personalizadas que contienen $OUTNUM$ y no empiezan con Local/. No se
+ * ofrecen las troncales de tipo IAX, ENUM, DUNDi o mISDN ni las personalizadas
+ * que empiezan con Local/; esas campañas usan "Por plan de marcado".
+ * EN: Only the trunks the dialer supports are offered: SIP, PJSIP, DAHDI/ZAP
+ * and custom trunks that contain $OUTNUM$ and do not start with Local/. Trunks
+ * of type IAX, ENUM, DUNDi or mISDN and custom trunks starting with Local/ are
+ * not offered; those campaigns use "By Dialplan".
+ *
+ * Sin tabla trunks (IssabelPBX muy antiguo) no hay lista: getTrunks() quita
+ * '$OUTNUM$@' de las personalizadas y no se puede saber cuáles lo eran.
+ * EN: Without a trunks table (very old IssabelPBX) there is no list:
+ * getTrunks() strips '$OUTNUM$@' from custom trunks, and which ones were
+ * custom cannot be told.
+ */
+function listarTroncalesCampania($oDB)
+{
+    $r = $oDB->fetchTable("SHOW TABLES LIKE 'trunks'");
+    if (!is_array($r) || count($r) <= 0) return array();
+    $r = $oDB->fetchTable(
+        "SELECT tech, channelid FROM trunks WHERE disabled IS NULL OR disabled <> 'on' ORDER BY trunkid", TRUE);
+    if (!is_array($r)) return NULL;
+    $lista = array();
+    foreach ($r as $tupla) {
+        $tech = strtolower($tupla['tech']);
+        $chan = $tupla['channelid'];
+        if ($tech == 'custom') {
+            $chan = preg_replace('|^AMP:|', '', $chan);
+            if (stripos($chan, '$OUTNUM$') !== FALSE && stripos($chan, 'Local/') !== 0)
+                $lista[] = $chan;
+        } elseif ($tech == 'sip' || $tech == 'pjsip') {
+            $lista[] = strtoupper($tech).'/'.$chan;
+        } elseif ($tech == 'zap' || $tech == 'dahdi') {
+            $lista[] = 'DAHDI/'.$chan;
+        }
+    }
+    return $lista;
+}
+
 function getFormCampaign($arrDataTrunks, $arrDataQueues, $arrSelectForm,
     $arrSelectFormElegidos, $arrUrlsExternos)
 {
@@ -927,7 +992,7 @@ function displayCampaignCSV($pDB, $smarty, $module_name, $local_templates_dir)
                 $lineaCSV = array_merge($lineaCSV, array_map('csv_replace', $datosCampania['FORMS'][$id_form]['LABEL']));
                 $lineaEspaciador = array_merge(
                     $lineaEspaciador,
-                    array_fill(0, count($datosCampania['FORMS'][$id_form]['LABEL']), '""'._tr('Form').'"'));
+                    array_fill(0, count($datosCampania['FORMS'][$id_form]['LABEL']), csv_replace(_tr('Form'))));
             }
             $sDatosCSV .= join(',', $lineaEspaciador)."\r\n";
             $sDatosCSV .= join(',', $lineaCSV)."\r\n";

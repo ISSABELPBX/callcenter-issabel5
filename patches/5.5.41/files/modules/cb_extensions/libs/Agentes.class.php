@@ -121,6 +121,12 @@ class Agentes
         }
 
         $typeExtension = explode("/",$agent[0]);
+        // La tecnología llega del formulario: aceptar solo extensiones callback
+        // EN: The technology comes from the form: accept only callback extensions
+        if (count($typeExtension) != 2 || !in_array($typeExtension[0], array('SIP', 'PJSIP', 'IAX2'))) {
+            $this->errMsg = 'Invalid agent data';
+            return FALSE;
+        }
 
         $tupla = $this->_DB->getFirstRowQuery(
             'SELECT COUNT(*) FROM agent WHERE estatus = "A" AND number = ?',
@@ -174,10 +180,16 @@ class Agentes
         }
 
         $typeExtension = explode("/",$agent[0]);
+        // La tecnología llega del formulario: aceptar solo extensiones callback
+        // EN: The technology comes from the form: accept only callback extensions
+        if (count($typeExtension) != 2 || !in_array($typeExtension[0], array('SIP', 'PJSIP', 'IAX2'))) {
+            $this->errMsg = 'Invalid agent data';
+            return FALSE;
+        }
 
         // Verificar que el agente referenciado existe
         $tupla = $this->_DB->getFirstRowQuery(
-            'SELECT COUNT(*) FROM agent WHERE estatus = "A" AND number = ?',
+            'SELECT COUNT(*) FROM agent WHERE estatus = "A" AND type <> "Agent" AND number = ?',
             FALSE, array($typeExtension[1]));
         if ($tupla[0] <= 0) {
             $this->errMsg = _tr('Agent not found');
@@ -194,7 +206,7 @@ class Agentes
         	$sPeticionSQL .= ', eccp_password = ?';
             $paramSQL[] = $agent[3];
         }
-        $sPeticionSQL .= ' WHERE number = ?';
+        $sPeticionSQL .= " WHERE number = ? AND type <> 'Agent' AND estatus = 'A'";
         $paramSQL[] = $typeExtension[1];
 
         $this->_DB->genQuery("SET AUTOCOMMIT = 0");
@@ -210,7 +222,7 @@ class Agentes
          * La contraseña será legible por la nueva consola de agente */
         if (is_null($agent[3])) {
             $agent[3] = sha1(time().rand());
-            $sPeticionSQL = 'UPDATE agent SET eccp_password = ? WHERE number = ? AND eccp_password IS NULL';
+            $sPeticionSQL = "UPDATE agent SET eccp_password = ? WHERE number = ? AND type <> 'Agent' AND estatus = 'A' AND eccp_password IS NULL";
             $paramSQL = array($agent[3], $typeExtension[1]);
             $result = $this->_DB->genQuery($sPeticionSQL, $paramSQL);
             if (!$result) {
@@ -244,7 +256,7 @@ class Agentes
 
         // BORRAR EN BASE DE DATOS
 
-        $sPeticionSQL = "UPDATE agent SET estatus='I' WHERE number=$id_agent";
+        $sPeticionSQL = "UPDATE agent SET estatus='I' WHERE number=$id_agent AND type <> 'Agent'";
 
         $result = $this->_DB->genQuery($sPeticionSQL);
         if (!$result) {
