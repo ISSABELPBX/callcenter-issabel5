@@ -391,7 +391,7 @@ function formEditAgent($pDB, $smarty, $module_name, $local_templates_dir, $id_ag
             } elseif ($_POST['eccpwd1'] != $_POST['eccpwd2']) {
                 $smarty->assign("mb_title", _tr("Validation Error"));
                 $smarty->assign("mb_message", _tr("ECCP passwords don't match"));
-            } elseif (!preg_match('/^[[:digit:]]+$/', $_POST['password1'])) {
+            } elseif (!($bDoUpdate && $_POST['password1'] == '') && !preg_match('/^[[:digit:]]+$/', $_POST['password1'])) {
                 $smarty->assign("mb_title", _tr("Validation Error"));
                 $smarty->assign("mb_message", _tr("The passwords aren't numeric values"));
             } elseif (!preg_match('/^[[:digit:]]+$/', $_POST['extension'])) {

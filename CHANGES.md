@@ -7,6 +7,21 @@ entries) and `CHANGELOG_OLD.md` (release notes up to 5.0.0-10).
 
 ---
 
+## 5.5.41
+
+- Bug fix: an outgoing campaign on a custom trunk dials. The trunk list no longer strips `$OUTNUM$@` from custom trunks; the dialer could not dial a stripped value such as `PJSIP/provider` (from `PJSIP/$OUTNUM$@provider`)
+- Bug fix: editing a campaign keeps its trunk even when that trunk is no longer listed (disabled, or saved in the old stripped form); "Apply changes" used to clear it to "By Dialplan"
+- Improve: a campaign is offered only the trunks the dialer supports: SIP, PJSIP, DAHDI/ZAP, and custom trunks that contain `$OUTNUM$` and do not start with `Local/`. Trunks of type IAX, ENUM, DUNDi and mISDN, and custom trunks starting with `Local/`, are no longer listed; "By Dialplan" covers them
+- Bug fix: an Asterisk 20 channel name, a custom trunk template or a caller ID longer than its column no longer aborts the call record under MariaDB strict mode. `trunk` and the channel columns widen to 255 and `callerid` to 80; widening keeps each column's DEFAULT. Each ALTER copies its table: on a box with a large call history, run the update off-hours
+- Bug fix: editing an agent or a callback extension with the password fields left blank keeps the current password, instead of failing with "The passwords aren't numeric values"
+- Bug fix: editing or deleting an agent changes only that agent's row. Rows of the other kind (Agent versus callback) and inactive history rows with the same number are left alone; a callback edit could turn such a row into SIP/PJSIP
+- Bug fix: a callback extension's technology is checked to be SIP, PJSIP or IAX2, so a crafted form value cannot create or convert an Agent-type row
+- Bug fix: the outgoing campaign list no longer shows a blank first row and a template warning
+- Bug fix: the outgoing campaign list shows the database error instead of failing when the campaigns cannot be read
+- Bug fix: the "Form" header row of the incoming and outgoing campaign CSV is valid CSV (`"Form"`, was `""Form"`)
+- Bug fix: Calls Detail and Calls per Agent exports (CSV, XLS, PDF) no longer carry the page's HTML, modal or graphs at the end
+- Bug fix: a client CSV upload reports the first invalid line, and the attribute's name in "Unsupported attribute"
+
 ## 5.5.40
 
 - New feature: the module's database user is its own `callcenter@localhost` — installer, in-place update, module DSNs, `dialerd.conf` and the dialer's built-in defaults all use it

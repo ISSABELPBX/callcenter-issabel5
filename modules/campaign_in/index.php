@@ -716,7 +716,7 @@ function displayCampaignCSV($pDB, $smarty, $module_name, $local_templates_dir)
                 $lineaCSV = array_merge($lineaCSV, array_map('csv_replace', $datosCampania['FORMS'][$id_form]['LABEL']));
                 $lineaEspaciador = array_merge(
                     $lineaEspaciador,
-                    array_fill(0, count($datosCampania['FORMS'][$id_form]['LABEL']), '""'._tr('Form').'"'));
+                    array_fill(0, count($datosCampania['FORMS'][$id_form]['LABEL']), csv_replace(_tr('Form'))));
             }
             $sDatosCSV .= join(',', $lineaEspaciador)."\r\n";
             $sDatosCSV .= join(',', $lineaCSV)."\r\n";

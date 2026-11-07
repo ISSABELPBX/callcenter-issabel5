@@ -229,7 +229,7 @@ class Agentes
         // Verificar que el agente referenciado existe
         // EN: Verify that the referenced agent exists
         $tupla = $this->_DB->getFirstRowQuery(
-            'SELECT COUNT(*) FROM agent WHERE estatus = "A" AND number = ?',
+            'SELECT COUNT(*) FROM agent WHERE estatus = "A" AND type = "Agent" AND number = ?',
             FALSE, array($agent[0]));
         if ($tupla[0] <= 0) {
             $this->errMsg = _tr('Agent not found');
@@ -248,7 +248,7 @@ class Agentes
         	$sPeticionSQL .= ', eccp_password = ?';
             $paramSQL[] = $agent[3];
         }
-        $sPeticionSQL .= ' WHERE number = ?';
+        $sPeticionSQL .= " WHERE number = ? AND type = 'Agent' AND estatus = 'A'";
         $paramSQL[] = $agent[0];
 
         $this->_DB->genQuery("SET AUTOCOMMIT = 0");
@@ -266,7 +266,7 @@ class Agentes
          * The password will be readable by the new agent console */
         if (is_null($agent[3])) {
             $agent[3] = sha1(time().rand());
-            $sPeticionSQL = 'UPDATE agent SET eccp_password = ? WHERE number = ? AND eccp_password IS NULL';
+            $sPeticionSQL = "UPDATE agent SET eccp_password = ? WHERE number = ? AND type = 'Agent' AND estatus = 'A' AND eccp_password IS NULL";
             $paramSQL = array($agent[3], $agent[0]);
             $result = $this->_DB->genQuery($sPeticionSQL, $paramSQL);
             if (!$result) {
@@ -375,7 +375,7 @@ class Agentes
         // BORRAR EN BASE DE DATOS
         // EN: DELETE IN DATABASE
 
-        $sPeticionSQL = "UPDATE agent SET estatus='I' WHERE number=$id_agent";
+        $sPeticionSQL = "UPDATE agent SET estatus='I' WHERE number=$id_agent AND type='Agent'";
 
         $this->_DB->genQuery("SET AUTOCOMMIT = 0");
         $result = $this->_DB->genQuery($sPeticionSQL);

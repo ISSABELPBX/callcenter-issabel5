@@ -188,14 +188,24 @@ if ($bBaseLista) {
         'campaign_date_schedule',
         "ADD KEY `campaign_date_schedule` (`id_campaign`, `date_init`, `date_end`, `time_init`, `time_end`)");
 
-    // Actualizar longitud de campos trunk y ChannelClient a 50 caracteres
-    // EN: Update length of trunk and ChannelClient fields to 50 characters
-    actualizarLongitudCampo($pDB, 'call_center', 'call_entry', 'trunk', 50);
-    actualizarLongitudCampo($pDB, 'call_center', 'call_progress_log', 'trunk', 50);
-    actualizarLongitudCampo($pDB, 'call_center', 'calls', 'trunk', 50);
-    actualizarLongitudCampo($pDB, 'call_center', 'campaign', 'trunk', 50);
-    actualizarLongitudCampo($pDB, 'call_center', 'current_call_entry', 'ChannelClient', 50);
-    actualizarLongitudCampo($pDB, 'call_center', 'current_calls', 'ChannelClient', 50);
+    // Actualizar longitud de campos trunk, canales y callerid. Con
+    // STRICT_TRANS_TABLES (MariaDB 10.2+) un valor más largo aborta toda la
+    // sentencia: los canales de Asterisk 20 (PJSIP/<troncal>-0000001a,
+    // Local/...;1), las plantillas de troncal personalizadas y los callerid
+    // largos no caben en 32/50/15 caracteres.
+    // EN: Update length of trunk, channel and callerid fields. Under
+    // STRICT_TRANS_TABLES (MariaDB 10.2+) a longer value aborts the whole
+    // statement: Asterisk 20 channels (PJSIP/<trunk>-0000001a, Local/...;1),
+    // custom trunk templates and long caller IDs do not fit 32/50/15 chars.
+    actualizarLongitudCampo($pDB, 'call_center', 'call_entry', 'trunk', 255);
+    actualizarLongitudCampo($pDB, 'call_center', 'call_progress_log', 'trunk', 255);
+    actualizarLongitudCampo($pDB, 'call_center', 'calls', 'trunk', 255);
+    actualizarLongitudCampo($pDB, 'call_center', 'campaign', 'trunk', 255);
+    actualizarLongitudCampo($pDB, 'call_center', 'current_call_entry', 'ChannelClient', 255);
+    actualizarLongitudCampo($pDB, 'call_center', 'current_calls', 'ChannelClient', 255);
+    actualizarLongitudCampo($pDB, 'call_center', 'current_calls', 'Channel', 255);
+    actualizarLongitudCampo($pDB, 'call_center', 'call_entry', 'callerid', 80);
+    actualizarLongitudCampo($pDB, 'call_center', 'current_call_entry', 'callerid', 80);
 
     /* Fijar el charset por omision de la base de datos misma. El CREATE
      * DATABASE de arriba no lleva charset, asi que la base hereda el del
@@ -411,7 +421,23 @@ VERIFICAR_LONGITUD;
             array($sDatabase, $sTabla, $sColumna)
         );
         $nullClause = (is_array($nulo) && strtoupper($nulo[0]) == 'YES') ? 'NULL' : 'NOT NULL';
-        $sql = "ALTER TABLE $sTabla MODIFY COLUMN $sColumna " . $tipo[0] . "($iNuevaLongitud) $nullClause";
+        // Conservar el DEFAULT de la columna (p.ej. current_calls.Channel DEFAULT '')
+        // EN: Keep the column's DEFAULT (e.g. current_calls.Channel DEFAULT '')
+        $defecto = $pDB->getFirstRowQuery(
+            "SELECT COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?",
+            FALSE,
+            array($sDatabase, $sTabla, $sColumna)
+        );
+        $defaultClause = '';
+        if (is_array($defecto) && !is_null($defecto[0]) && strtoupper($defecto[0]) != 'NULL') {
+            // MariaDB 10.2+ devuelve el literal entre comillas ('' para cadena vacía)
+            // EN: MariaDB 10.2+ returns the quoted literal ('' for an empty string)
+            $sDef = $defecto[0];
+            if (!(strlen($sDef) >= 2 && $sDef[0] == "'" && substr($sDef, -1) == "'"))
+                $sDef = "'".str_replace("'", "''", $sDef)."'";
+            $defaultClause = " DEFAULT $sDef";
+        }
+        $sql = "ALTER TABLE $sTabla MODIFY COLUMN $sColumna " . $tipo[0] . "($iNuevaLongitud) $nullClause$defaultClause";
         fputs(STDERR, "INFO: Actualizando longitud de $sTabla.$sColumna a $iNuevaLongitud caracteres | EN: INFO: Updating length of $sTabla.$sColumna to $iNuevaLongitud characters\n");
         fputs(STDERR, "\t$sql\n");
         $r = $pDB->genQuery($sql);

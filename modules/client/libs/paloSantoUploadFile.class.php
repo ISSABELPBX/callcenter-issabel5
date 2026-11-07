@@ -258,11 +258,14 @@ class paloSantoUploadFile
                     elseif ($atributo['CLAVE'] == 3)
                         $sApellido = $atributo['VALOR'];
                     else {
-                        $this->errMsg = _tr('Line').' '.$tuplaNumero['POSICION'].' - '._tr('Unsupported attribute').': '.$sAtributo['CLAVE'];
+                        $this->errMsg = _tr('Line').' '.$tuplaNumero['POSICION'].' - '._tr('Unsupported attribute').': '.$atributo['CLAVE'];
                         $bValido = FALSE;
                         break;
                     }
                 }
+                // Detener la validación en el primer error para no sobrescribir el mensaje
+                // EN: Stop at the first error so the message is not overwritten
+                if (!$bValido) break;
 
     	        // Validar que la CÉDULA sea una cadena numérica
     	        // EN: Validate that CÉDULA is a numeric string
